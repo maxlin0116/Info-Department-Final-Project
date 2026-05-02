@@ -13,10 +13,10 @@ exports.getUsers = async (req, res, next) => {
 exports.updateUserRole = async (req, res, next) => {
     try {
         const userId = req.params.id;
-        const { role } = req.body
+        const { role } = req.body;
 
         const updatedUser = await adminService.updateUserRole(userId, role);
-        res.status(200).json({ message: '權限更新成功', user: updatedUser });
+        res.status(200).json({ message: 'Role updated successfully', user: updatedUser });
     } catch (error) {
         next(error);
     }
@@ -35,7 +35,7 @@ exports.approveReservation = async (req, res, next) => {
     try {
         const reservationId = req.params.id;
         const approvedReservation = await reservationService.approveReservation(reservationId);
-        res.status(200).json({ message: '預約已核准', reservation: approvedReservation });
+        res.status(200).json({ message: 'Reservation approved', reservation: approvedReservation });
     } catch (error) {
         next(error);
     }
@@ -45,7 +45,7 @@ exports.rejectReservation = async (req, res, next) => {
     try {
         const reservationId = req.params.id;
         const rejectedReservation = await reservationService.rejectReservation(reservationId);
-        res.status(200).json({ message: '預約已拒絕', reservation: rejectedReservation });
+        res.status(200).json({ message: 'Reservation rejected', reservation: rejectedReservation });
     } catch (error) {
         next(error);
     }

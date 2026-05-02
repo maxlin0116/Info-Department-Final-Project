@@ -1,21 +1,22 @@
 const authService = require('../services/auth.service');
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 exports.register = async (req, res, next) => {
     try {
         const { name, grade, student_id, password, personal_email } = req.body;
         if (!name || !grade || !student_id || !password || !personal_email) {
-            return res.status(400).json({ error: '所有欄位皆為必填' });
+            return res.status(400).json({ error: 'All fields are required' });
         }
 
        if (!emailRegex.test(personal_email)) {
-            return res.status(400).json({ error: '信箱格式不正確，請檢查是否有漏打 @ 或 .' });
+            return res.status(400).json({ error: 'Invalid email format. Please check for missing @ or .' });
         }
 
         const newUser = await authService.registerUser({
             name, grade, student_id, password, personal_email
         });
 
-        res.status(201).json({ message: '註冊成功', user: newUser });
+        res.status(201).json({ message: 'Registration successful', user: newUser });
     } catch (error) {
         next(error);
     }
@@ -26,12 +27,12 @@ exports.login = async (req, res, next) => {
         const { student_id, password } = req.body;
 
         if (!student_id || !password) {
-            return res.status(400).json({ error: '請輸入學號與密碼' });
+            return res.status(400).json({ error: 'Please provide student ID and password' });
         }
 
         const result = await authService.loginUser(student_id, password);
         
-        res.status(200).json({ message: '登入成功', ...result });
+        res.status(200).json({ message: 'Login successful', ...result });
     } catch (error) {
         next(error);
     }
@@ -39,8 +40,8 @@ exports.login = async (req, res, next) => {
 
 exports.logout = async (req, res, next) => {
     try {
-        // 如果使用 JWT，前端清除 token 即可，後端可能不需要做什麼，或者將 token 加入黑名單
-        res.status(200).json({ message: '登出成功' });
+        // If using JWT, the frontend just needs to clear the token. The backend might not need to do anything, or it could blacklist the token.
+        res.status(200).json({ message: 'Logout successful' });
     } catch (error) {
         next(error);
     }
@@ -48,9 +49,9 @@ exports.logout = async (req, res, next) => {
 
 exports.getMe = async (req, res, next) => {
     try {
-        // req.user 應該在 auth.middleware 中被設定
+        // req.user should be set in auth.middleware
         if (!req.user) {
-            return res.status(401).json({ error: '未經授權' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
         res.status(200).json({ user: req.user });
     } catch (error) {

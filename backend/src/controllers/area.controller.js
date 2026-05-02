@@ -26,7 +26,7 @@ exports.getAreaStatusById = async (req, res, next) => {
         const status = await areaService.getSingleAreaStatus(id, currentTime);
         
         if (!status) {
-            return res.status(404).json({ error: '找不到該區域' });
+            return res.status(404).json({ error: 'Area not found' });
         }
         
         res.status(200).json({ status });

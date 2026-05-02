@@ -10,7 +10,7 @@ exports.registerUser = async (userData) => {
 
     const existingUser = await User.findByStudentId(student_id);
     if (existingUser) {
-        throw new Error('此學號已經註冊過囉');
+        throw new Error('This student ID is already registered');
     }
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -31,12 +31,12 @@ exports.registerUser = async (userData) => {
 exports.loginUser = async (student_id, password) => {
     const user = await User.findByStudentId(student_id);
     if (!user) {
-        throw new Error('學號或密碼錯誤');
+        throw new Error('Invalid student ID or password');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
-        throw new Error('學號或密碼錯誤');
+        throw new Error('Invalid student ID or password');
     }
 
     const token = jwt.sign(

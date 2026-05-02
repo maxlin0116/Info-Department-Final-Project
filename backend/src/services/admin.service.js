@@ -7,12 +7,12 @@ exports.getAllUsers = async () => {
 
 exports.updateUserRole = async (userId, role) => {
     if (!['admin', 'regular'].includes(role)) {
-        throw new Error('無效的權限角色');
+        throw new Error('Invalid user role');
     }
     
     const updatedUser = await User.updateRole(userId, role);
     if (!updatedUser) {
-        throw new Error('找不到該使用者');
+        throw new Error('User not found');
     }
     
     return updatedUser;
