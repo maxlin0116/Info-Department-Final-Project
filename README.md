@@ -8,28 +8,70 @@ Author: 曾竹慧、林孟希、許友懌
 
 ## Project Overview
 
-This project is a reservation and registration system for managing the MKS space. Users can check the current room status, register current usage, and reserve available time slots through a website.
+This project is a reservation and registration system for managing the MKS space. Users can check the current status of different areas, register current usage, and reserve available time slots through a website.
 
-The main goal is to make it easy for NTUEE students to know whether MKS is currently being used, who has reserved future time slots, and which time slots are still available.
+The system focuses on reservation and usage registration only. It does not include student ID card access control, card readers, or door lock integration.
 
-This project focuses on registration and reservation only. It does not include student ID card access control, card readers, or door lock integration.
+## Reservation Areas
+
+Reservations are separated by area. Each area can have its own reservation limit and display rules.
+
+| Area | Description | Reservation Limit |
+| --- | --- | --- |
+| Meeting Area | Used for meetings, discussions, and group work | Based on the meeting area's capacity |
+| Soldering Table | Used for soldering and electronics work | 8 seats |
+| 3DP Area | Used for 3D printing | Based on printer availability; users can also check whether someone is currently printing |
+| Heavy Processing Area | Used for heavier machining or processing work | Based on equipment availability and safety rules |
 
 ## Goals
 
-- Provide online reservation for the MKS space
-- Show the current MKS usage status in real time
+- Provide online reservation for different MKS areas
+- Show the current usage status of each area in real time
+- Show whether the 3DP area currently has active printing jobs
 - Allow users to register current or future usage
-- Support priority levels based on user role and activity type
+- Set reservation limits based on the selected area
 - Record reservation history
 - Allow administrators to review, update, or cancel reservations
+
+## Account Requirements
+
+Users need to create an account before making reservations.
+
+Required account information:
+
+| Field | Description |
+| --- | --- |
+| student_id | Used as the login account |
+| password | Set by the user |
+| personal_email | Used for contact and reservation notifications |
+
+## Reservation Form Requirements
+
+Each reservation should include:
+
+| Field | Description |
+| --- | --- |
+| area | Selected area: Meeting Area, Soldering Table, 3DP Area, or Heavy Processing Area |
+| start_time | Reservation start time |
+| end_time | Reservation end time |
+| participant_count | Total number of people using the area |
+| required_items | Notes about required tools, machines, materials, or special needs |
+| purpose | Purpose of use |
+
+## Reservation Rules
+
+- Reservation limits depend on the selected area.
+- The Soldering Table has 8 available seats.
+- The 3DP Area should show whether there are active printing reservations.
+- Users can cancel their own reservations no later than 6 hours before the reservation start time.
+- Reservations that start in less than 6 hours can only be cancelled or changed by an admin.
 
 ## User Roles
 
 | Role | Permissions |
 | --- | --- |
 | Admin | Can view all reservations, manage users, approve reservations, and edit reservation records |
-| High-priority user | For events such as school visits, dance club activities, engineering camps, or major activities. Can request higher-priority reservations |
-| Regular user | Can register usage and reserve MKS during opening hours |
+| Regular user | Can register usage and reserve MKS areas during opening hours |
 | Guest | Can only view public reservation information |
 
 ## System Architecture
@@ -75,16 +117,20 @@ mks-reservation-system/
 |   |-- src/
 |   |   |-- pages/
 |   |   |   |-- LoginPage.jsx
+|   |   |   |-- RegisterPage.jsx
 |   |   |   |-- DashboardPage.jsx
 |   |   |   |-- CalendarPage.jsx
 |   |   |   |-- MyReservationsPage.jsx
 |   |   |   `-- AdminPage.jsx
 |   |   |-- components/
+|   |   |   |-- AreaStatusCard.jsx
 |   |   |   |-- Calendar.jsx
 |   |   |   |-- ReservationModal.jsx
-|   |   |   |-- CurrentStatusCard.jsx
+|   |   |   |-- ReservationForm.jsx
 |   |   |   `-- Navbar.jsx
 |   |   |-- api/
+|   |   |   |-- authApi.js
+|   |   |   |-- areaApi.js
 |   |   |   `-- reservationApi.js
 |   |   `-- App.jsx
 |   `-- package.json
@@ -94,18 +140,21 @@ mks-reservation-system/
 |   |   |-- app.js
 |   |   |-- routes/
 |   |   |   |-- auth.routes.js
+|   |   |   |-- area.routes.js
 |   |   |   |-- reservation.routes.js
 |   |   |   `-- admin.routes.js
 |   |   |-- controllers/
 |   |   |   |-- auth.controller.js
+|   |   |   |-- area.controller.js
 |   |   |   |-- reservation.controller.js
 |   |   |   `-- admin.controller.js
 |   |   |-- services/
-|   |   |   |-- reservation.service.js
-|   |   |   |-- priority.service.js
-|   |   |   `-- auth.service.js
+|   |   |   |-- auth.service.js
+|   |   |   |-- area.service.js
+|   |   |   `-- reservation.service.js
 |   |   |-- models/
 |   |   |   |-- user.model.js
+|   |   |   |-- area.model.js
 |   |   |   |-- reservation.model.js
 |   |   |   `-- openingHour.model.js
 |   |   |-- middlewares/
@@ -126,7 +175,7 @@ Routes define API paths and should not contain business logic.
 
 ```js
 router.post("/reservations", createReservation);
-router.get("/reservations/current", getCurrentReservation);
+router.get("/areas/status", getAreaStatus);
 ```
 
 ### controllers
@@ -145,45 +194,49 @@ async function createReservation(req, res) {
 Services contain the main business logic, such as:
 
 - Checking whether a time is within opening hours
-- Checking whether a reservation conflicts with another reservation
-- Determining user priority
+- Checking whether an area has enough capacity
+- Checking whether a reservation conflicts with another reservation in the same area
+- Finding the current usage status of each area
+- Showing whether 3DP has active printing reservations
 - Creating, updating, approving, or rejecting reservations
-- Finding the current active reservation
 
 ### models
 
 Models handle table definitions and database operations, such as:
 
 - User
+- Area
 - Reservation
 - OpeningHour
-
-### middlewares
-
-Middlewares handle shared request logic, such as:
-
-- Checking whether the user is logged in
-- Checking user role and permission
-- Handling error responses
 
 ## Main Pages
 
 | Page | Features |
 | --- | --- |
-| Login Page | User login |
-| Dashboard / Current Status Page | Shows whether MKS is currently occupied, the current user, and the next reservation |
-| Reservation Calendar Page | Shows all reservations and allows users to create new reservations |
+| Register Page | Create an account using student ID, password, and personal email |
+| Login Page | User login using student ID and password |
+| Dashboard / Current Status Page | Shows current usage status for Meeting Area, Soldering Table, 3DP Area, and Heavy Processing Area |
+| Reservation Calendar Page | Shows reservations by area and allows users to create new reservations |
 | My Reservations | Allows users to view, update, or cancel their own reservations |
-| Admin Dashboard | Allows administrators to manage users, reservations, and approvals |
+| Admin Dashboard | Allows administrators to manage users, areas, reservations, and approvals |
 
 ## API Design
 
 ### Auth
 
 ```txt
+POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/logout
 GET  /api/auth/me
+```
+
+### Areas
+
+```txt
+GET /api/areas
+GET /api/areas/status
+GET /api/areas/:id/status
 ```
 
 ### Reservations
@@ -207,34 +260,51 @@ PATCH /api/admin/reservations/:id/approve
 PATCH /api/admin/reservations/:id/reject
 ```
 
-## Current Usage Logic
+## Current Area Status Logic
 
-The current usage logic should be placed in:
+The current area status logic should be placed in:
 
 ```txt
-backend/src/services/reservation.service.js
+backend/src/services/area.service.js
 ```
 
 Decision flow:
 
 1. Get the current time
-2. Search for an approved reservation where the current time is between `start_time` and `end_time`
-3. If a reservation exists, show the current user, activity title, and end time
-4. If no reservation exists, show that MKS is currently available
-5. Also show the next upcoming reservation
+2. For each area, search for approved reservations where the current time is between `start_time` and `end_time`
+3. Count how many seats, machines, or slots are currently being used
+4. Compare the current usage with the area's reservation limit
+5. Show whether the area is available, partially occupied, or full
+6. For the 3DP area, also show whether there are active printing jobs
 
 Example:
 
 ```js
-async function getCurrentReservation(currentTime) {
-  const currentReservation = await reservationModel.findCurrent(currentTime);
-  const nextReservation = await reservationModel.findNext(currentTime);
+async function getAreaStatus(currentTime) {
+  const areas = await areaModel.findAll();
 
-  return {
-    isOccupied: Boolean(currentReservation),
-    currentReservation,
-    nextReservation
-  };
+  return Promise.all(
+    areas.map(async (area) => {
+      const currentReservations = await reservationModel.findCurrentByArea(
+        area.id,
+        currentTime
+      );
+
+      const usedCount = currentReservations.reduce(
+        (sum, reservation) => sum + reservation.participantCount,
+        0
+      );
+
+      return {
+        area,
+        currentReservations,
+        usedCount,
+        maxCapacity: area.maxCapacity,
+        isFull: usedCount >= area.maxCapacity,
+        hasActivePrinting: area.type === "3dp" && currentReservations.length > 0
+      };
+    })
+  );
 }
 ```
 
@@ -249,16 +319,18 @@ backend/src/services/reservation.service.js
 Decision flow:
 
 1. Check whether the requested time range is within opening hours
-2. Check whether the time slot conflicts with an existing approved reservation
-3. If there is no conflict, create the reservation directly
-4. If there is a conflict, compare the applicant's priority level
-5. A high-priority request can be marked as pending for admin review
-6. A normal conflicting request should be rejected
+2. Check the selected area's reservation limit
+3. Check whether the new reservation would exceed the area's capacity
+4. If the area still has enough capacity, create the reservation
+5. If the area is full, reject the reservation
+6. If admin approval is required, set the reservation status to `pending`
 
 Example:
 
 ```js
 async function createReservation(user, data) {
+  const area = await areaModel.findById(data.areaId);
+
   const isOpen = await openingHourService.isRangeOpen(
     data.startTime,
     data.endTime
@@ -268,30 +340,74 @@ async function createReservation(user, data) {
     throw new Error("Reservation time is outside opening hours");
   }
 
-  const conflict = await reservationModel.findConflict(
+  const usedCount = await reservationModel.countParticipantsInRange(
+    data.areaId,
     data.startTime,
     data.endTime
   );
 
-  if (!conflict) {
-    return reservationModel.create({
-      ...data,
-      userId: user.id,
-      priority: user.priority,
-      status: "approved"
-    });
+  const nextCount = usedCount + data.participantCount;
+
+  if (nextCount > area.maxCapacity) {
+    throw new Error("This area does not have enough available capacity");
   }
 
-  if (user.priority > conflict.priority) {
-    return reservationModel.create({
-      ...data,
-      userId: user.id,
-      priority: user.priority,
-      status: "pending"
-    });
+  return reservationModel.create({
+    areaId: data.areaId,
+    userId: user.id,
+    purpose: data.purpose,
+    requiredItems: data.requiredItems,
+    participantCount: data.participantCount,
+    startTime: data.startTime,
+    endTime: data.endTime,
+    status: "approved"
+  });
+}
+```
+
+## Cancellation Logic
+
+The cancellation logic should be placed in:
+
+```txt
+backend/src/services/reservation.service.js
+```
+
+Decision flow:
+
+1. Find the reservation by ID
+2. Check whether the current user owns the reservation
+3. If the user is an admin, allow cancellation
+4. If the user is not an admin, compare the current time with the reservation start time
+5. If the reservation starts in more than 6 hours, allow cancellation
+6. If the reservation starts in less than 6 hours, reject the cancellation
+
+Example:
+
+```js
+async function cancelReservation(user, reservationId, currentTime) {
+  const reservation = await reservationModel.findById(reservationId);
+
+  if (!reservation) {
+    throw new Error("Reservation not found");
   }
 
-  throw new Error("This time slot is already reserved");
+  if (user.role === "admin") {
+    return reservationModel.cancel(reservationId);
+  }
+
+  if (reservation.userId !== user.id) {
+    throw new Error("You can only cancel your own reservations");
+  }
+
+  const sixHoursBeforeStart = new Date(reservation.startTime);
+  sixHoursBeforeStart.setHours(sixHoursBeforeStart.getHours() - 6);
+
+  if (currentTime > sixHoursBeforeStart) {
+    throw new Error("Reservations can only be cancelled at least 6 hours before the start time");
+  }
+
+  return reservationModel.cancel(reservationId);
 }
 ```
 
@@ -302,12 +418,23 @@ async function createReservation(user, data) {
 | Field | Description |
 | --- | --- |
 | id | User ID |
+| student_id | Student ID, used as login account |
+| password_hash | Hashed password |
+| personal_email | User's personal email |
 | name | User name |
-| email | Email address |
-| student_id | Student ID |
 | role | User role |
-| priority | Reservation priority level |
 | created_at | Creation time |
+
+### areas
+
+| Field | Description |
+| --- | --- |
+| id | Area ID |
+| name | Area name |
+| type | Area type, such as meeting, soldering, 3dp, or heavy_processing |
+| max_capacity | Maximum reservation capacity |
+| description | Area description |
+| is_active | Whether this area is available for reservation |
 
 ### reservations
 
@@ -315,12 +442,13 @@ async function createReservation(user, data) {
 | --- | --- |
 | id | Reservation ID |
 | user_id | Reservation owner ID |
-| title | Reservation title |
+| area_id | Reserved area ID |
 | purpose | Purpose of use |
+| required_items | Required tools, machines, materials, or special notes |
+| participant_count | Total number of people |
 | start_time | Start time |
 | end_time | End time |
 | status | Reservation status, such as approved, pending, or rejected |
-| priority | Reservation priority level |
 | created_at | Creation time |
 
 ### opening_hours
@@ -337,16 +465,18 @@ async function createReservation(user, data) {
 
 If time is limited, the minimum viable version should include:
 
-1. User login
-2. Current MKS usage status
-3. Create, view, and cancel reservations
-4. Admin view for all reservations
-5. Basic reservation conflict checking
+1. User registration with student ID, password, and personal email
+2. User login
+3. Area list: Meeting Area, Soldering Table, 3DP Area, and Heavy Processing Area
+4. Current usage status for each area
+5. Create, view, and cancel reservations
+6. Reservation limit checking based on selected area
+7. Admin view for all reservations
 
 After completing the MVP, the following features can be added:
 
 - Reservation approval workflow
-- High-priority and low-priority override rules
 - Special opening hour settings
 - User permission management
 - Reservation history search
+- 3DP printing progress notes
