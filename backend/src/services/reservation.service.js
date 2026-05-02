@@ -1,6 +1,1 @@
-const reservationService = {
-  createReservation() {},
-  cancelReservation() {}
-};
-
-module.exports = reservationService;
+module.exports = {};

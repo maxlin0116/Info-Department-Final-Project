@@ -1,5 +1,1 @@
-const areaService = {
-  getAreaStatus() {}
-};
-
-module.exports = areaService;
+module.exports = {};
