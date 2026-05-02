@@ -41,9 +41,13 @@ Required account information:
 
 | Field | Description |
 | --- | --- |
+| name | User's real name |
+| grade | User's grade or year |
 | student_id | Used as the login account |
 | password | Set by the user |
-| personal_email | Used for contact and reservation notifications |
+| personal_email | Personal email used for contact and reservation notifications. It should not be an `ntu.edu.tw` email |
+
+Users do not need to register before browsing the website. If a user makes a reservation for the first time, the system should create an account during the reservation process.
 
 ## Reservation Form Requirements
 
@@ -55,8 +59,11 @@ Each reservation should include:
 | start_time | Reservation start time |
 | end_time | Reservation end time |
 | participant_count | Total number of people using the area |
+| planned_items | Optional list of items or equipment the user plans to use, such as development boards, modules, soldering irons, or 3DP |
 | required_items | Notes about required tools, machines, materials, or special needs |
 | purpose | Purpose of use |
+| when2meet | Optional scheduling reference or when2meet link |
+| project | Optional project name or project description |
 
 ## Reservation Rules
 
@@ -64,7 +71,9 @@ Each reservation should include:
 - The Soldering Table has 8 available seats.
 - The 3DP Area should show whether there are active printing reservations.
 - Users can cancel their own reservations no later than 6 hours before the reservation start time.
-- Reservations that start in less than 6 hours can only be cancelled or changed by an admin.
+- Reservations that start in less than 6 hours cannot be changed by regular users.
+- Reservations for different areas should be separated clearly on the frontend dashboard.
+- If a user needs multiple areas, the system should create or display separate reservations for each area.
 
 ## User Roles
 
@@ -215,7 +224,7 @@ Models handle table definitions and database operations, such as:
 | --- | --- |
 | Register Page | Create an account using student ID, password, and personal email |
 | Login Page | User login using student ID and password |
-| Dashboard / Current Status Page | Shows current usage status for Meeting Area, Soldering Table, 3DP Area, and Heavy Processing Area |
+| Dashboard / Current Status Page | Shows current usage status for Meeting Area, Soldering Table, 3DP Area, and Heavy Processing Area in separate sections |
 | Reservation Calendar Page | Shows reservations by area and allows users to create new reservations |
 | My Reservations | Allows users to view, update, or cancel their own reservations |
 | Admin Dashboard | Allows administrators to manage users, areas, reservations, and approvals |
@@ -230,6 +239,8 @@ POST /api/auth/login
 POST /api/auth/logout
 GET  /api/auth/me
 ```
+
+The first reservation flow can also create a user account if the student ID does not exist yet.
 
 ### Areas
 
@@ -418,10 +429,11 @@ async function cancelReservation(user, reservationId, currentTime) {
 | Field | Description |
 | --- | --- |
 | id | User ID |
+| name | User's real name |
+| grade | User's grade or year |
 | student_id | Student ID, used as login account |
 | password_hash | Hashed password |
-| personal_email | User's personal email |
-| name | User name |
+| personal_email | User's personal email, excluding `ntu.edu.tw` email addresses |
 | role | User role |
 | created_at | Creation time |
 
@@ -444,8 +456,11 @@ async function cancelReservation(user, reservationId, currentTime) {
 | user_id | Reservation owner ID |
 | area_id | Reserved area ID |
 | purpose | Purpose of use |
+| planned_items | Optional list of planned tools, machines, materials, or equipment |
 | required_items | Required tools, machines, materials, or special notes |
 | participant_count | Total number of people |
+| when2meet | Optional when2meet link or scheduling reference |
+| project | Optional project name or description |
 | start_time | Start time |
 | end_time | End time |
 | status | Reservation status, such as approved, pending, or rejected |
@@ -471,7 +486,9 @@ If time is limited, the minimum viable version should include:
 4. Current usage status for each area
 5. Create, view, and cancel reservations
 6. Reservation limit checking based on selected area
-7. Admin view for all reservations
+7. First-time reservation account creation
+8. Dashboard sections separated by reservation area
+9. Admin view for all reservations
 
 After completing the MVP, the following features can be added:
 
