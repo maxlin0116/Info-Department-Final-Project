@@ -1,5 +1,7 @@
+// Import Mongoose library for MongoDB interactions
 const mongoose = require("mongoose");
 
+// Define the Area schema with fields: name, type, maxCapacity, description, showPrintingStatus, and isActive
 const areaSchema = new mongoose.Schema(
   {
     name: {
@@ -20,6 +22,10 @@ const areaSchema = new mongoose.Schema(
     description: {
       type: String,
       default: ""
+    },
+    showPrintingStatus: {
+      type: Boolean,
+      default: false
     },
     isActive: {
       type: Boolean,

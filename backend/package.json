@@ -5,7 +5,10 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "node src/app.js"
+    "dev": "node src/app.js",
+    "seed": "npm run seed:areas && npm run seed:opening-hours",
+    "seed:areas": "node src/database/seedAreas.js",
+    "seed:opening-hours": "node src/database/seedOpeningHours.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

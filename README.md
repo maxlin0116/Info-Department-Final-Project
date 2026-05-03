@@ -59,8 +59,7 @@ Each reservation should include:
 | start_time | Reservation start time |
 | end_time | Reservation end time |
 | participant_count | Total number of people using the area |
-| planned_items | Optional list of items or equipment the user plans to use, such as development boards, modules, soldering irons, or 3DP |
-| required_items | Notes about required tools, machines, materials, or special needs |
+| plannedItems | Optional list of items or equipment the user plans to use, such as development boards, modules, soldering irons, or 3DP |
 | purpose | Purpose of use |
 | when2meet | Optional scheduling reference or when2meet link |
 | project | Optional project name or project description |
@@ -170,7 +169,9 @@ mks-reservation-system/
 |   |   |   |-- auth.middleware.js
 |   |   |   `-- role.middleware.js
 |   |   `-- database/
-|   |       `-- db.js
+|   |       |-- db.js
+|   |       |-- seedAreas.js
+|   |       `-- seedOpeningHours.js
 |   `-- package.json
 |
 `-- README.md
@@ -334,7 +335,8 @@ Decision flow:
 3. Check whether the new reservation would exceed the area's capacity
 4. If the area still has enough capacity, create the reservation
 5. If the area is full, reject the reservation
-6. If admin approval is required, set the reservation status to `pending`
+6. New reservations are created with `pending` status by default
+7. Admins can approve or reject pending reservations
 
 Example:
 
@@ -367,11 +369,11 @@ async function createReservation(user, data) {
     areaId: data.areaId,
     userId: user.id,
     purpose: data.purpose,
-    requiredItems: data.requiredItems,
+    plannedItems: data.plannedItems,
     participantCount: data.participantCount,
     startTime: data.startTime,
     endTime: data.endTime,
-    status: "approved"
+    status: "pending"
   });
 }
 ```
@@ -446,7 +448,15 @@ async function cancelReservation(user, reservationId, currentTime) {
 | type | Area type, such as meeting, soldering, 3dp, or heavy_processing |
 | max_capacity | Maximum reservation capacity |
 | description | Area description |
+| showPrintingStatus | Whether the frontend should show current printing status for this area. This is `true` for the 3DP Area |
 | is_active | Whether this area is available for reservation |
+
+Default area data can be inserted with:
+
+```txt
+cd backend
+npm run seed:areas
+```
 
 ### reservations
 
@@ -456,14 +466,13 @@ async function cancelReservation(user, reservationId, currentTime) {
 | user_id | Reservation owner ID |
 | area_id | Reserved area ID |
 | purpose | Purpose of use |
-| planned_items | Optional list of planned tools, machines, materials, or equipment |
-| required_items | Required tools, machines, materials, or special notes |
+| plannedItems | Optional list of planned tools, machines, materials, or equipment |
 | participant_count | Total number of people |
 | when2meet | Optional when2meet link or scheduling reference |
 | project | Optional project name or description |
 | start_time | Start time |
 | end_time | End time |
-| status | Reservation status, such as approved, pending, or rejected |
+| status | Reservation status, such as pending, approved, rejected, or cancelled |
 | created_at | Creation time |
 
 ### opening_hours
@@ -471,10 +480,28 @@ async function cancelReservation(user, reservationId, currentTime) {
 | Field | Description |
 | --- | --- |
 | id | Opening hour ID |
-| day_of_week | Day of week |
-| open_time | Opening time |
-| close_time | Closing time |
-| is_open | Whether the space is open on that day |
+| dayOfWeek | Day of week, from 1 to 5 |
+| dayLabel | Day label, such as Monday or Tuesday |
+| slot | Time slot key, such as morning, afternoonA, afternoonB, eveningA, or eveningB |
+| slotLabel | Time slot label |
+| openTime | Opening time |
+| closeTime | Closing time |
+| staffName | Staff member responsible for this time slot |
+| isOpen | Whether the space is open during this time slot |
+
+Default opening hour data can be inserted with:
+
+```txt
+cd backend
+npm run seed:opening-hours
+```
+
+All default seed data can be inserted with:
+
+```txt
+cd backend
+npm run seed
+```
 
 ## MVP Scope
 

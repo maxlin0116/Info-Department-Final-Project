@@ -1,14 +1,16 @@
+// Import Mongoose library for MongoDB interactions
 const mongoose = require("mongoose");
 
+// Define the Reservation schema with fields: user, area, purpose, plannedItems, participantCount, when2meet, project, startTime, endTime, and status
 const reservationSchema = new mongoose.Schema(
   {
     user: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId, // Reference to the User model
       ref: "User",
       required: true
     },
     area: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId, // Reference to the Area model
       ref: "Area",
       required: true
     },
@@ -18,12 +20,8 @@ const reservationSchema = new mongoose.Schema(
       trim: true
     },
     plannedItems: {
-      type: [String],
+      type: [String], // Array of strings to store planned items for the reservation
       default: []
-    },
-    requiredItems: {
-      type: String,
-      default: ""
     },
     participantCount: {
       type: Number,
@@ -49,7 +47,7 @@ const reservationSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["approved", "pending", "rejected", "cancelled"],
-      default: "approved"
+      default: "pending"
     }
   },
   {
