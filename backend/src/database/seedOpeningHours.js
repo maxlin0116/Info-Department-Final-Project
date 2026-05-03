@@ -1,11 +1,14 @@
+// Import necessary libraries and modules
 const dotenv = require("dotenv");
 const mongoose = require("mongoose");
 
+// Import the function to connect to the database and the OpeningHour model
 const connectDatabase = require("./db");
 const OpeningHour = require("../models/openingHour.model");
 
-dotenv.config();
+dotenv.config(); // Load environment variables from .env file
 
+// Define an array of opening hours to seed the database
 const openingHours = [
   {
     dayOfWeek: 1,
@@ -234,14 +237,16 @@ const openingHours = [
   }
 ];
 
+// Function to seed the opening hours into the database
 async function seedOpeningHours() {
-  await connectDatabase();
+  await connectDatabase(); 
   await OpeningHour.deleteMany();
   await OpeningHour.insertMany(openingHours);
   console.log("Opening hours seeded");
   await mongoose.disconnect();
 }
 
+// Execute the seeding function and handle any errors that occur during the process
 seedOpeningHours().catch(async (error) => {
   console.error("Failed to seed opening hours", error);
   await mongoose.disconnect();
