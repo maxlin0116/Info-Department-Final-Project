@@ -19,10 +19,25 @@ const reservationSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
-    plannedItems: {
-      type: [String], // Array of strings to store planned items for the reservation
-      default: []
-    },
+    plannedItems: [
+      {
+        category: {
+          type: String,
+          enum: ["development_board", "module", "other"],
+          required: true
+        },
+        name: {
+          type: String,
+          required: true,
+          trim: true
+        },
+        quantity: {
+          type: Number,
+          min: 1,
+          default: 1
+        }
+      }
+    ],
     participantCount: {
       type: Number,
       required: true,

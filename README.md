@@ -59,10 +59,54 @@ Each reservation should include:
 | start_time | Reservation start time |
 | end_time | Reservation end time |
 | participant_count | Total number of people using the area |
-| plannedItems | Optional list of items or equipment the user plans to use, such as development boards, modules, soldering irons, or 3DP |
+| plannedItems | Optional list of items or equipment the user plans to use. Each item can include category, name, and quantity |
 | purpose | Purpose of use |
 | when2meet | Optional scheduling reference or when2meet link |
 | project | Optional project name or project description |
+
+## Planned Item Options
+
+Users can optionally select or write the items they expect to use.
+
+### Development Boards
+
+| Item |
+| --- |
+| Arduino series |
+| ESP series |
+| RPi |
+| STM32 |
+
+### Modules
+
+For modules, users should also write the expected quantity.
+
+| Item |
+| --- |
+| TB6612 |
+| Servo motor |
+| Buck converter |
+| MFRC522 |
+| DHT11 |
+| Photoresistor |
+| Buzzer |
+
+Example `plannedItems` data:
+
+```js
+[
+  {
+    category: "development_board",
+    name: "Arduino series",
+    quantity: 1
+  },
+  {
+    category: "module",
+    name: "TB6612",
+    quantity: 2
+  }
+]
+```
 
 ## Reservation Rules
 
@@ -466,7 +510,7 @@ npm run seed:areas
 | user_id | Reservation owner ID |
 | area_id | Reserved area ID |
 | purpose | Purpose of use |
-| plannedItems | Optional list of planned tools, machines, materials, or equipment |
+| plannedItems | Optional list of planned tools, machines, materials, or equipment. Each item contains category, name, and quantity |
 | participant_count | Total number of people |
 | when2meet | Optional when2meet link or scheduling reference |
 | project | Optional project name or description |
