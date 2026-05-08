@@ -300,24 +300,31 @@ function AreaCard({
       whileHover={shouldReduceMotion ? {} : { y: -4, transition: { duration: 0.2 } }}
       className={`relative p-5 rounded-xl border flex flex-col transition-all duration-300 ${getStatusColor(
         status,
-      )} group cursor-default`}
+      )} group cursor-default h-full`}
     >
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 rounded-lg bg-slate-900/50 border border-slate-700 shrink-0">
-            <Icon className="w-5 h-5" />
+      <div className="flex flex-col gap-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-md bg-slate-900/50 border border-slate-700 shrink-0">
+              <Icon className="w-3.5 h-3.5" />
+            </div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-mono leading-none truncate">
+              {eyebrow}
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-1 font-mono">{eyebrow}</p>
-            <h3 className="font-semibold text-slate-100 truncate font-mono tracking-tight">{item.area.name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{getAreaDetails(item)}</p>
+          <div className="flex items-center gap-1.5 shrink-0 bg-slate-950/40 px-2 py-1 rounded-sm border border-slate-800/50">
+            <div className={`w-1.5 h-1.5 rounded-full ${getStatusGlow(status)} ${shouldReduceMotion ? "" : "animate-pulse"}`} />
+            <span className="text-[9px] font-bold uppercase tracking-tight opacity-70 whitespace-nowrap font-mono">
+              {getStatusLabel(status)}
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-medium uppercase tracking-wider opacity-80 whitespace-nowrap font-mono">
-            {getStatusLabel(status)}
-          </span>
-          <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusGlow(status)}`} />
+
+        <div className="min-w-0">
+          <h3 className="font-bold text-slate-100 font-mono tracking-tight text-lg leading-tight">
+            {item.area.name}
+          </h3>
+          <p className="text-[11px] text-slate-400 mt-1 font-mono opacity-80">{getAreaDetails(item)}</p>
         </div>
       </div>
 
