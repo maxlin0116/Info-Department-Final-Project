@@ -17,13 +17,19 @@ The system focuses on reservation and usage registration only. It does not inclu
 The current codebase already includes the following end-to-end features:
 
 - User registration and login with JWT-based sessions
+- Student ID validation (`1 letter + 8 digits`) on both frontend and backend
+- Grade selection from a predefined dropdown on the registration page
 - Optional admin session login from the frontend using a server-side `ADMIN_ACCESS_PASSWORD`
+- Automatic frontend logout when the JWT session expires
 - Live area status driven by backend reservation data
 - Area availability lookup for reservation time-slot selection
+- Opening-hour-aware availability slots, including edge slots that align to the actual open/close times
 - Reservation form fields for participant count, purpose, planned items, project notes, and when2meet link
+- Prevention of reservations for past time slots
 - New reservations created with `pending` status by default
 - Pending reservations counted toward capacity before approval
-- "My Reservations" panel with status badges and cancellation support
+- "My Reservations" panel with status badges for pending, upcoming, in-progress, completed, cancelled, and rejected reservations
+- Reservation history separated from active reservations on the dashboard
 - 6-hour cancellation restriction for regular users
 - Admin review page for approving or rejecting pending reservations
 
@@ -99,14 +105,23 @@ Required account information:
 | Field | Description |
 | --- | --- |
 | name | User's real name |
-| grade | User's grade or year |
-| student_id | Used as the login account |
+| grade | User's grade or year, selected from the built-in dropdown |
+| student_id | Used as the login account. Format: `1 letter + 8 digits` |
 | password | Set by the user |
-| personal_email | Personal email used for contact and reservation notifications. It should not be an `ntu.edu.tw` email |
+| personal_email | Personal email used for contact and reservation notifications |
 
 Users do not need to register before browsing the website, but they must register before submitting a reservation.
 
 The current implementation also supports an **admin session login** from the normal login page. A user logs in with their normal student ID and password, then optionally enables admin login and provides the server-side `ADMIN_ACCESS_PASSWORD`.
+
+Current registration form options for `grade` are:
+
+- `Freshman`
+- `Sophomore`
+- `Junior`
+- `Senior`
+- `Master's`
+- `PhD`
 
 ## Reservation Form Requirements
 
@@ -120,7 +135,7 @@ Each reservation should include:
 | participant_count | Total number of people using the area |
 | plannedItems | Optional list of items or equipment the user plans to use. Each item can include category, name, and quantity |
 | purpose | Purpose of use |
-| when2meet | Optional scheduling reference or when2meet link |
+| when2meet | Optional scheduling reference or when2meet link. The current system stores and displays this value for users and admins, but does not auto-parse or sync When2meet availability |
 | project | Optional project name or project description |
 
 ## Planned Item Options
@@ -173,6 +188,8 @@ Example `plannedItems` data:
 - The Soldering Table has 8 available seats.
 - The 3DP Area should show whether there are active printing reservations.
 - New reservations are created as `pending` and still count toward capacity.
+- Users cannot create reservations for past time slots.
+- Reservation availability follows the configured opening-hour blocks and break periods.
 - Users can cancel their own reservations no later than 6 hours before the reservation start time.
 - Reservations that start in less than 6 hours cannot be changed by regular users.
 - Admins can approve or reject pending reservations from the admin review page.
@@ -328,9 +345,9 @@ Models handle table definitions and database operations, such as:
 
 | Page | Features |
 | --- | --- |
-| Register Page | Create an account using student ID, password, and personal email |
-| Login Page | User login using student ID and password, with optional admin session login |
-| Dashboard / Current Status Page | Shows current usage status, allows creating reservations, and includes a "My Reservations" panel |
+| Register Page | Create an account using name, grade, student ID, password, and personal email, with frontend validation for student ID format |
+| Login Page | User login using student ID and password, with optional admin session login using the server-side admin access password |
+| Dashboard / Current Status Page | Shows current usage status, allows creating reservations, and includes active reservations plus reservation history |
 | Admin Reservation Review | Allows administrators to review pending reservations and approve or reject them |
 
 ## API Design
@@ -395,6 +412,15 @@ Decision flow:
 5. Show whether the area is available, partially occupied, or full
 6. For the 3DP area, also show whether there are active printing jobs
 
+Availability lookup for the reservation modal is derived from `opening_hours` plus overlapping `pending` and `approved` reservations. The backend returns per-day slots with:
+
+- `time`
+- `endTime`
+- `occupiedCount`
+- `remainingCapacity`
+- `isFull`
+- `hasReservation`
+
 Example:
 
 ```js
@@ -444,6 +470,8 @@ Decision flow:
 6. New reservations are created with `pending` status by default
 7. Pending reservations also count toward availability until reviewed
 8. Admins can approve or reject pending reservations
+9. Reservations for past time slots are rejected
+10. Regular users cannot modify reservations that start in less than 6 hours
 
 Example:
 
@@ -540,9 +568,9 @@ async function cancelReservation(user, reservationId, currentTime) {
 | id | User ID |
 | name | User's real name |
 | grade | User's grade or year |
-| student_id | Student ID, used as login account |
+| student_id | Student ID, used as login account. Format: `1 letter + 8 digits` |
 | password_hash | Hashed password |
-| personal_email | User's personal email, excluding `ntu.edu.tw` email addresses |
+| personal_email | User's personal email |
 | role | User role |
 | created_at | Creation time |
 
