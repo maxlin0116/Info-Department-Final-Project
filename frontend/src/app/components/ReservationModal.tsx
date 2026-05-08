@@ -336,7 +336,7 @@ export function ReservationModal({
           <X className="w-5 h-5" />
         </button>
 
-        <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50 overflow-y-auto">
+        <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50 overflow-y-auto custom-scrollbar">
           <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-100 mb-1">Reserve Space</h2>
             <p className="text-sm text-emerald-400 font-medium tracking-wide">{resourceName}</p>
@@ -555,7 +555,7 @@ export function ReservationModal({
           )}
         </div>
 
-        <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col min-h-[420px] md:min-h-0 md:h-[500px]">
+        <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col min-h-[420px]">
           <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
             <h3 className="text-sm font-semibold tracking-wider text-slate-400 uppercase">Availability Overview</h3>
             <div className="flex items-center gap-4 text-xs font-medium flex-wrap">
