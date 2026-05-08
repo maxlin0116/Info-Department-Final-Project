@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import {
   AlertCircle,
   CalendarClock,
@@ -370,6 +370,7 @@ function AreaCard({
 
 export function Dashboard() {
   const { token, user, isAuthenticated } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
   const [areas, setAreas] = useState<AreaStatusItem[]>([]);
@@ -382,9 +383,9 @@ export function Dashboard() {
   const [actingReservationId, setActingReservationId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [refreshNonce, setRefreshNonce] = useState(0);
-  const [showHistory, setShowHistory] = useState(false);
   const isAdmin = user?.role === "admin";
   const shouldReduceMotion = useReducedMotion();
+  const showHistory = searchParams.get("view") === "history";
 
   const enrichedReservations = useMemo(() => {
     const now = new Date();
@@ -407,6 +408,18 @@ export function Dashboard() {
   const handleReserve = (area: AreaSummary) => {
     setSelectedArea(area);
     setModalOpen(true);
+  };
+
+  const openHistory = () => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("view", "history");
+    setSearchParams(nextSearchParams);
+  };
+
+  const closeHistory = () => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("view");
+    setSearchParams(nextSearchParams);
   };
 
   useEffect(() => {
@@ -560,7 +573,7 @@ export function Dashboard() {
         reservations={enrichedReservations}
         loading={loadingReservations}
         error={reservationsError}
-        onBack={() => setShowHistory(false)}
+        onBack={closeHistory}
       />
     );
   }
@@ -616,7 +629,7 @@ export function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setShowHistory(true)}
+              onClick={openHistory}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-slate-100 hover:border-slate-500 transition-all cursor-pointer"
             >
               <HistoryIcon className="w-3.5 h-3.5" />
@@ -643,7 +656,7 @@ export function Dashboard() {
           <div className="px-5 py-10 text-center text-slate-500 font-mono italic">
             NO_ACTIVE_RESERVATIONS_FOUND
             <button 
-              onClick={() => setShowHistory(true)}
+              onClick={openHistory}
               className="block mx-auto mt-2 text-xs text-emerald-500/70 hover:text-emerald-400 underline"
             >
               CHECK_ARCHIVED_HISTORY
