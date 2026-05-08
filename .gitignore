@@ -5,3 +5,4 @@ frontend/.env
 *.log
 .vscode/
 frontend/dist/
+.gemini/
