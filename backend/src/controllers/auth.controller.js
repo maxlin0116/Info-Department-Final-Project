@@ -1,5 +1,5 @@
 const authService = require("../services/auth.service");
-const emailRegex = /^[^s@]+@[^s@]+.[^s@]+$/;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 exports.register = async (req, res, next) => {
   try {
