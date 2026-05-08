@@ -533,12 +533,12 @@ export function ReservationModal({
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">When2meet</label>
-                <input
-                  type="url"
+                <textarea
+                  rows={2}
                   value={when2meet}
                   onChange={(event) => setWhen2meet(event.target.value)}
-                  placeholder="Optional scheduling reference or when2meet link"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                  placeholder={"Optional scheduling reference\nor when2meet link"}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
                 />
               </div>
 
