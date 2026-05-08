@@ -2,8 +2,15 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 
-const JWT_SECRET = process.env.JWT_SECRET || "development-only-secret";
 const JWT_EXPIRES_IN = "7d";
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || "development-only-secret";
+}
+
+function getAdminAccessPassword() {
+  return process.env.ADMIN_ACCESS_PASSWORD?.trim() || "";
+}
 
 function createError(statusCode, message) {
   const error = new Error(message);
@@ -11,7 +18,7 @@ function createError(statusCode, message) {
   return error;
 }
 
-function serializeUser(user) {
+function serializeUser(user, roleOverride) {
   if (!user) {
     return null;
   }
@@ -24,20 +31,22 @@ function serializeUser(user) {
     grade: source.grade,
     studentId: source.studentId,
     personalEmail: source.personalEmail,
-    role: source.role,
+    role: roleOverride ?? source.role,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
 }
 
-function issueToken(user) {
+function issueToken(user, roleOverride) {
+  const effectiveRole = roleOverride ?? user.role;
+
   return jwt.sign(
     {
       id: String(user._id),
       studentId: user.studentId,
-      role: user.role,
+      role: effectiveRole,
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: JWT_EXPIRES_IN }
   );
 }
@@ -77,7 +86,7 @@ exports.registerUser = async (userData) => {
   };
 };
 
-exports.loginUser = async (studentId, password) => {
+exports.loginUser = async (studentId, password, options = {}) => {
   const normalizedStudentId = studentId?.trim();
   if (!normalizedStudentId || !password) {
     throw createError(400, "Please provide student ID and password");
@@ -93,8 +102,29 @@ exports.loginUser = async (studentId, password) => {
     throw createError(401, "Invalid student ID or password");
   }
 
+  let sessionRole = user.role;
+
+  if (options.asAdmin) {
+    const providedAdminPassword = options.adminPassword?.trim();
+    const configuredAdminPassword = getAdminAccessPassword();
+
+    if (!providedAdminPassword) {
+      throw createError(400, "Please provide the admin access password");
+    }
+
+    if (!configuredAdminPassword) {
+      throw createError(500, "Admin access password is not configured on the server");
+    }
+
+    if (providedAdminPassword !== configuredAdminPassword) {
+      throw createError(403, "Invalid admin access password");
+    }
+
+    sessionRole = "admin";
+  }
+
   return {
-    token: issueToken(user),
-    user: serializeUser(user),
+    token: issueToken(user, sessionRole),
+    user: serializeUser(user, sessionRole),
   };
 };

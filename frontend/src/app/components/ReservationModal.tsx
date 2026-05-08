@@ -37,6 +37,12 @@ interface AvailabilityResponse {
   dates: AvailabilityDate[];
 }
 
+interface PlannedItemPayload {
+  category: "other";
+  name: string;
+  quantity: number;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")
   : "";
@@ -67,6 +73,18 @@ async function readErrorMessage(response: Response) {
   }
 }
 
+function parsePlannedItems(input: string): PlannedItemPayload[] {
+  return input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((name) => ({
+      category: "other" as const,
+      name,
+      quantity: 1,
+    }));
+}
+
 export function ReservationModal({
   isOpen,
   onClose,
@@ -81,6 +99,10 @@ export function ReservationModal({
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [people, setPeople] = useState("1");
+  const [purpose, setPurpose] = useState("");
+  const [plannedItemsInput, setPlannedItemsInput] = useState("");
+  const [projectNotes, setProjectNotes] = useState("");
+  const [when2meet, setWhen2meet] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -101,6 +123,10 @@ export function ReservationModal({
     setStartTime("");
     setEndTime("");
     setPeople("1");
+    setPurpose("");
+    setPlannedItemsInput("");
+    setProjectNotes("");
+    setWhen2meet("");
     setError(null);
     setAvailability(null);
 
@@ -238,10 +264,10 @@ export function ReservationModal({
           startTime: toIsoDateTime(date, startTime),
           endTime: toIsoDateTime(date, endTime),
           participantCount: selectedPeople,
-          purpose: resourceName + " reservation",
-          plannedItems: [],
-          when2meet: "",
-          project: "",
+          purpose: purpose.trim() || `${resourceName} reservation`,
+          plannedItems: parsePlannedItems(plannedItemsInput),
+          when2meet: when2meet.trim(),
+          project: projectNotes.trim(),
         }),
       });
 
@@ -301,8 +327,8 @@ export function ReservationModal({
   const submitDisabled = !isAuthenticated || loading || submitting || !date || !startTime || !endTime;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+    <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 overflow-y-auto bg-slate-950/80 backdrop-blur-sm">
+      <div className="relative my-auto w-full max-w-5xl max-h-[calc(100vh-2rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-[0_0_40px_rgba(0,0,0,0.5)]">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors z-10"
@@ -310,19 +336,19 @@ export function ReservationModal({
           <X className="w-5 h-5" />
         </button>
 
-        <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50">
+        <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50 overflow-y-auto">
           <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-100 mb-1">Reserve Space</h2>
             <p className="text-sm text-emerald-400 font-medium tracking-wide">{resourceName}</p>
           </div>
 
           {isSuccess ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center animate-in fade-in zoom-in duration-300">
+              <div className="flex flex-col items-center justify-center h-64 text-center animate-in fade-in zoom-in duration-300">
               <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-100">Reservation Confirmed</h3>
-              <p className="text-sm text-slate-400 mt-2">Your booking has been saved to the backend.</p>
+              <h3 className="text-lg font-semibold text-slate-100">Reservation Submitted</h3>
+              <p className="text-sm text-slate-400 mt-2">Your booking is saved and waiting for admin review.</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -468,6 +494,54 @@ export function ReservationModal({
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Purpose</label>
+                <input
+                  type="text"
+                  value={purpose}
+                  onChange={(event) => setPurpose(event.target.value)}
+                  placeholder="Purpose of use"
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                />
+                <p className="text-xs text-slate-500">Purpose of use</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Planned Items</label>
+                <textarea
+                  rows={4}
+                  value={plannedItemsInput}
+                  onChange={(event) => setPlannedItemsInput(event.target.value)}
+                  placeholder={"One item per line\nArduino series\nESP series\nBreadboard"}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
+                />
+                <p className="text-xs text-slate-500">
+                  Optional list of items or equipment the user plans to use.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Project</label>
+                <textarea
+                  rows={3}
+                  value={projectNotes}
+                  onChange={(event) => setProjectNotes(event.target.value)}
+                  placeholder="Optional project name or project description"
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">When2meet</label>
+                <input
+                  type="url"
+                  value={when2meet}
+                  onChange={(event) => setWhen2meet(event.target.value)}
+                  placeholder="Optional scheduling reference or when2meet link"
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                />
+              </div>
+
               <div className="pt-4">
                 <button
                   type="submit"
@@ -481,7 +555,7 @@ export function ReservationModal({
           )}
         </div>
 
-        <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col h-[500px]">
+        <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col min-h-[420px] md:min-h-0 md:h-[500px]">
           <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
             <h3 className="text-sm font-semibold tracking-wider text-slate-400 uppercase">Availability Overview</h3>
             <div className="flex items-center gap-4 text-xs font-medium flex-wrap">

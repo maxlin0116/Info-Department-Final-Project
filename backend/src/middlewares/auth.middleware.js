@@ -2,7 +2,9 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 const { serializeUser } = require("../services/auth.service");
 
-const JWT_SECRET = process.env.JWT_SECRET || "development-only-secret";
+function getJwtSecret() {
+  return process.env.JWT_SECRET || "development-only-secret";
+}
 
 function getBearerToken(req) {
   const header = req.headers.authorization;
@@ -14,13 +16,13 @@ function getBearerToken(req) {
 }
 
 async function resolveUserFromToken(token) {
-  const payload = jwt.verify(token, JWT_SECRET);
+  const payload = jwt.verify(token, getJwtSecret());
   const user = await User.findById(payload.id);
   if (!user) {
     return null;
   }
 
-  return serializeUser(user);
+  return serializeUser(user, payload.role);
 }
 
 async function authenticate(req, res, next) {

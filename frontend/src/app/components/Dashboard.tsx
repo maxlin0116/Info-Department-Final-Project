@@ -1,15 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import {
   AlertCircle,
+  CalendarClock,
   Hammer,
   Plus,
   Printer,
   RefreshCw,
   Users,
+  XCircle,
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ReservationModal } from "./ReservationModal";
+import { useAuth } from "../auth";
 
 type Status = "available" | "occupied" | "maintenance";
 type AreaType = "meeting" | "soldering" | "3dp" | "heavy_processing";
@@ -37,6 +41,35 @@ interface AreaStatusResponse {
   statuses: AreaStatusItem[];
 }
 
+interface ReservationArea {
+  id: string;
+  name: string;
+  type: AreaType;
+}
+
+interface PlannedItem {
+  category: string;
+  name: string;
+  quantity: number;
+}
+
+interface ReservationItem {
+  id: string;
+  area: ReservationArea;
+  participantCount: number;
+  purpose: string;
+  plannedItems: PlannedItem[];
+  when2meet: string;
+  project: string;
+  startTime: string;
+  endTime: string;
+  status: "approved" | "pending" | "rejected" | "cancelled";
+}
+
+interface MyReservationsResponse {
+  reservations: ReservationItem[];
+}
+
 interface AreaMeta {
   icon: LucideIcon;
   eyebrow: string;
@@ -45,6 +78,119 @@ interface AreaMeta {
 const AREA_STATUS_ENDPOINT = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")}/api/areas/status`
   : "/api/areas/status";
+const MY_RESERVATIONS_ENDPOINT = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")}/api/reservations/my`
+  : "/api/reservations/my";
+
+const formatReservationDate = (value: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+
+const formatPlannedItems = (items: PlannedItem[]) =>
+  items
+    .filter((item) => item && item.name)
+    .map((item) => `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`)
+    .join(", ");
+
+async function readApiError(response: Response) {
+  const text = await response.text();
+  if (!text) {
+    return `Request failed with status ${response.status}`;
+  }
+
+  try {
+    const payload = JSON.parse(text) as { error?: unknown };
+    return typeof payload.error === "string" ? payload.error : `Request failed with status ${response.status}`;
+  } catch {
+    return text;
+  }
+}
+
+const getReservationStatusLabel = (reservation: ReservationItem, now: Date) => {
+  if (reservation.status === "cancelled") {
+    return "Cancelled";
+  }
+
+  if (reservation.status === "rejected") {
+    return "Rejected";
+  }
+
+  if (reservation.status === "pending") {
+    return "Pending";
+  }
+
+  const startTime = new Date(reservation.startTime);
+  const endTime = new Date(reservation.endTime);
+
+  if (now < startTime) {
+    return "Upcoming";
+  }
+
+  if (now >= startTime && now < endTime) {
+    return "In Progress";
+  }
+
+  return "Completed";
+};
+
+const getReservationStatusClassName = (status: string) => {
+  switch (status) {
+    case "Upcoming":
+      return "text-sky-300 bg-sky-500/10 border-sky-500/30";
+    case "In Progress":
+      return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
+    case "Completed":
+      return "text-slate-300 bg-slate-500/10 border-slate-500/30";
+    case "Pending":
+      return "text-amber-300 bg-amber-500/10 border-amber-500/30";
+    case "Rejected":
+      return "text-rose-300 bg-rose-500/10 border-rose-500/30";
+    case "Cancelled":
+      return "text-slate-400 bg-slate-800/70 border-slate-700";
+    default:
+      return "text-slate-300 bg-slate-500/10 border-slate-500/30";
+  }
+};
+
+const canCancelReservation = (reservation: ReservationItem, now: Date, isAdmin: boolean) => {
+  if (isAdmin) {
+    return reservation.status !== "cancelled" && reservation.status !== "rejected";
+  }
+
+  if (reservation.status === "cancelled" || reservation.status === "rejected") {
+    return false;
+  }
+
+  const startTime = new Date(reservation.startTime);
+  const hoursUntilStart = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+  return hoursUntilStart >= 6;
+};
+
+const getCancelHint = (reservation: ReservationItem, now: Date, isAdmin: boolean) => {
+  if (isAdmin) {
+    return "Admin can cancel this reservation.";
+  }
+
+  if (reservation.status === "cancelled") {
+    return "This reservation is already cancelled.";
+  }
+
+  if (reservation.status === "rejected") {
+    return "Rejected reservations cannot be cancelled.";
+  }
+
+  const startTime = new Date(reservation.startTime);
+  const hoursUntilStart = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+  if (hoursUntilStart < 6) {
+    return "Reservations can only be cancelled at least 6 hours before the start time.";
+  }
+
+  return "You can cancel this reservation.";
+};
 
 const getStatusColor = (status: Status) => {
   switch (status) {
@@ -182,13 +328,30 @@ function AreaCard({ item, onReserve }: { item: AreaStatusItem; onReserve: (area:
 }
 
 export function Dashboard() {
+  const { token, user, isAuthenticated } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
   const [areas, setAreas] = useState<AreaStatusItem[]>([]);
+  const [myReservations, setMyReservations] = useState<ReservationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingReservations, setLoadingReservations] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reservationsError, setReservationsError] = useState<string | null>(null);
+  const [reservationActionError, setReservationActionError] = useState<string | null>(null);
+  const [actingReservationId, setActingReservationId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const isAdmin = user?.role === "admin";
+
+  const enrichedReservations = useMemo(() => {
+    const now = new Date();
+    return myReservations.map((reservation) => ({
+      ...reservation,
+      derivedStatus: getReservationStatusLabel(reservation, now),
+      canCancel: canCancelReservation(reservation, now, isAdmin),
+      cancelHint: getCancelHint(reservation, now, isAdmin),
+    }));
+  }, [myReservations, isAdmin]);
 
   const handleReserve = (area: AreaSummary) => {
     setSelectedArea(area);
@@ -254,6 +417,95 @@ export function Dashboard() {
     };
   }, [refreshNonce]);
 
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setMyReservations([]);
+      setReservationsError(null);
+      setLoadingReservations(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMyReservations = async () => {
+      try {
+        if (!cancelled) {
+          setLoadingReservations(true);
+          setReservationsError(null);
+        }
+
+        const response = await fetch(MY_RESERVATIONS_ENDPOINT, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`My reservations request failed with ${response.status}`);
+        }
+
+        const payload = (await response.json()) as MyReservationsResponse;
+        if (!Array.isArray(payload.reservations)) {
+          throw new Error("Invalid reservations response");
+        }
+
+        if (!cancelled) {
+          setMyReservations(payload.reservations);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          const message =
+            loadError instanceof Error ? loadError.message : "Failed to load your reservations";
+          setReservationsError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingReservations(false);
+        }
+      }
+    };
+
+    void loadMyReservations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, token, refreshNonce]);
+
+  const handleCancelReservation = async (reservationId: string) => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setActingReservationId(reservationId);
+      setReservationActionError(null);
+
+      const endpoint = import.meta.env.VITE_API_BASE_URL
+        ? `${import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")}/api/reservations/${reservationId}`
+        : `/api/reservations/${reservationId}`;
+
+      const response = await fetch(endpoint, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await readApiError(response));
+      }
+
+      setRefreshNonce((current) => current + 1);
+    } catch (actionError) {
+      setReservationActionError(
+        actionError instanceof Error ? actionError.message : "Failed to cancel reservation"
+      );
+    } finally {
+      setActingReservationId(null);
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col gap-4 mb-6">
@@ -279,6 +531,102 @@ export function Dashboard() {
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div className="mb-8 rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-100">My Reservations</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Track your upcoming, active, and completed bookings.
+            </p>
+          </div>
+          <CalendarClock className="w-5 h-5 text-slate-500 shrink-0" />
+        </div>
+
+        {!isAuthenticated ? (
+          <div className="px-5 py-6 text-sm text-slate-400">
+            <span>Log in to view your reservation status. </span>
+            <Link to="/login" className="text-emerald-400 hover:text-emerald-300 font-medium">
+              Go to login
+            </Link>
+          </div>
+        ) : loadingReservations ? (
+          <div className="px-5 py-6 text-sm text-slate-400">Loading your reservations...</div>
+        ) : reservationsError ? (
+          <div className="px-5 py-6 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20">
+            {reservationsError}
+          </div>
+        ) : enrichedReservations.length === 0 ? (
+          <div className="px-5 py-6 text-sm text-slate-400">
+            You do not have any reservations yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800">
+            {enrichedReservations.map((reservation) => (
+              <div
+                key={reservation.id}
+                className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="text-sm font-semibold text-slate-100">{reservation.area.name}</h3>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${getReservationStatusClassName(
+                        reservation.derivedStatus
+                      )}`}
+                    >
+                      {reservation.derivedStatus}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {formatReservationDate(reservation.startTime)} - {formatReservationDate(reservation.endTime)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {reservation.participantCount} participant(s)
+                    {reservation.purpose ? ` · ${reservation.purpose}` : ""}
+                  </p>
+                  {reservation.plannedItems.length > 0 ? (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Items: {formatPlannedItems(reservation.plannedItems)}
+                    </p>
+                  ) : null}
+                  {reservation.project ? (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Notes: {reservation.project}
+                    </p>
+                  ) : null}
+                  {reservation.when2meet ? (
+                    <p className="text-xs text-slate-500 mt-1 break-all">
+                      When2meet: {reservation.when2meet}
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-slate-500 mt-1">{reservation.cancelHint}</p>
+                </div>
+                <div className="flex flex-col items-start lg:items-end gap-2 shrink-0">
+                  <div className="text-xs text-slate-500">
+                    Reservation ID: {reservation.id.slice(-8)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelReservation(reservation.id)}
+                    disabled={!reservation.canCancel || actingReservationId === reservation.id}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={reservation.cancelHint}
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    {actingReservationId === reservation.id ? "Cancelling..." : "Cancel Reservation"}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {reservationActionError ? (
+              <div className="px-5 py-4 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20">
+                {reservationActionError}
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {loading ? (

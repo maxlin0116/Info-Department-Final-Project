@@ -22,6 +22,8 @@ interface AuthState {
 interface LoginInput {
   studentId: string;
   password: string;
+  asAdmin?: boolean;
+  adminPassword?: string;
 }
 
 interface RegisterInput {
@@ -115,13 +117,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>(loadStoredAuth);
   const isAuthenticated = Boolean(authState.token && authState.user);
 
-  const login = async ({ studentId, password }: LoginInput) => {
+  const login = async ({ studentId, password, asAdmin = false, adminPassword = "" }: LoginInput) => {
     const response = await fetch(getEndpoint("/api/auth/login"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ studentId, password }),
+      body: JSON.stringify({ studentId, password, asAdmin, adminPassword }),
     });
 
     const payload = (await readApiPayload(response)) as {

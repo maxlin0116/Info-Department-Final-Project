@@ -8,6 +8,8 @@ export function Login() {
   const { login, isAuthenticated } = useAuth();
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
+  const [asAdmin, setAsAdmin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +23,7 @@ export function Login() {
     setError(null);
 
     try {
-      await login({ studentId, password });
+      await login({ studentId, password, asAdmin, adminPassword });
       navigate("/", { replace: true });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Login failed");
@@ -66,6 +68,40 @@ export function Login() {
                 className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
             </div>
+
+            <label className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={asAdmin}
+                onChange={(event) => {
+                  setAsAdmin(event.target.checked);
+                  if (!event.target.checked) {
+                    setAdminPassword("");
+                  }
+                }}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/50"
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-200">Admin login</div>
+                <div className="text-xs text-slate-500">
+                  Use an additional admin access password to enter the review interface.
+                </div>
+              </div>
+            </label>
+
+            {asAdmin ? (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Admin Access Password</label>
+                <input
+                  type="password"
+                  required
+                  value={adminPassword}
+                  onChange={(event) => setAdminPassword(event.target.value)}
+                  placeholder="Enter admin access password"
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all"
+                />
+              </div>
+            ) : null}
 
             {error ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

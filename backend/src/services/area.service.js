@@ -8,6 +8,7 @@ const SLOT_SIZE_MINUTES = 30;
 const DEFAULT_AVAILABILITY_DAYS = 5;
 const MAX_AVAILABILITY_DAYS = 10;
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ACTIVE_RESERVATION_STATUSES = ["approved", "pending"];
 
 function toAreaPayload(area) {
   return {
@@ -112,7 +113,7 @@ function overlaps(startA, endA, startB, endB) {
 async function buildAreaStatus(area, currentTime) {
   const currentReservations = await Reservation.find({
     area: area._id,
-    status: "approved",
+    status: { $in: ACTIVE_RESERVATION_STATUSES },
     startTime: { $lte: currentTime },
     endTime: { $gt: currentTime },
   }).lean();
@@ -170,7 +171,7 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
     OpeningHour.find({ dayOfWeek: { $in: dayNumbers }, isOpen: true }).lean(),
     Reservation.find({
       area: area._id,
-      status: "approved",
+      status: { $in: ACTIVE_RESERVATION_STATUSES },
       startTime: { $lt: endOfDay(dates[dates.length - 1]) },
       endTime: { $gt: startOfDay(dates[0]) },
     })

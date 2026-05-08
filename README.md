@@ -8,9 +8,24 @@ Author: 曾竹慧、林孟希、許友懌
 
 ## Project Overview
 
-This project is a reservation and registration system for managing the MKS space. Users can check the current status of different areas, register current usage, and reserve available time slots through a website.
+This project is a reservation and registration system for managing the MKS space. Users can check the live status of different areas, create reservations, track their own reservation status, and submit reservations for administrator review through a web interface.
 
 The system focuses on reservation and usage registration only. It does not include student ID card access control, card readers, or door lock integration.
+
+## Current Implementation Status
+
+The current codebase already includes the following end-to-end features:
+
+- User registration and login with JWT-based sessions
+- Optional admin session login from the frontend using a server-side `ADMIN_ACCESS_PASSWORD`
+- Live area status driven by backend reservation data
+- Area availability lookup for reservation time-slot selection
+- Reservation form fields for participant count, purpose, planned items, project notes, and when2meet link
+- New reservations created with `pending` status by default
+- Pending reservations counted toward capacity before approval
+- "My Reservations" panel with status badges and cancellation support
+- 6-hour cancellation restriction for regular users
+- Admin review page for approving or rejecting pending reservations
 
 ## Reservation Areas
 
@@ -33,6 +48,48 @@ Reservations are separated by area. Each area can have its own reservation limit
 - Record reservation history
 - Allow administrators to review, update, or cancel reservations
 
+## Local Development
+
+### Backend
+
+1. Create `backend/.env` with at least:
+
+```txt
+PORT=8000
+MONGODB_URI=<your mongodb connection string>
+JWT_SECRET=<your jwt secret>
+ADMIN_ACCESS_PASSWORD=<your admin access password>
+```
+
+2. Install dependencies and start the API:
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+3. Optional seed commands:
+
+```bash
+cd backend
+npm run seed:areas
+npm run seed:opening-hours
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Default local URLs:
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:8000`
+
 ## Account Requirements
 
 Users need to create an account before making reservations.
@@ -47,7 +104,9 @@ Required account information:
 | password | Set by the user |
 | personal_email | Personal email used for contact and reservation notifications. It should not be an `ntu.edu.tw` email |
 
-Users do not need to register before browsing the website. If a user makes a reservation for the first time, the system should create an account during the reservation process.
+Users do not need to register before browsing the website, but they must register before submitting a reservation.
+
+The current implementation also supports an **admin session login** from the normal login page. A user logs in with their normal student ID and password, then optionally enables admin login and provides the server-side `ADMIN_ACCESS_PASSWORD`.
 
 ## Reservation Form Requirements
 
@@ -113,8 +172,10 @@ Example `plannedItems` data:
 - Reservation limits depend on the selected area.
 - The Soldering Table has 8 available seats.
 - The 3DP Area should show whether there are active printing reservations.
+- New reservations are created as `pending` and still count toward capacity.
 - Users can cancel their own reservations no later than 6 hours before the reservation start time.
 - Reservations that start in less than 6 hours cannot be changed by regular users.
+- Admins can approve or reject pending reservations from the admin review page.
 - Reservations for different areas should be separated clearly on the frontend dashboard.
 - If a user needs multiple areas, the system should create or display separate reservations for each area.
 
@@ -122,7 +183,7 @@ Example `plannedItems` data:
 
 | Role | Permissions |
 | --- | --- |
-| Admin | Can view all reservations, manage users, approve reservations, and edit reservation records |
+| Admin | Can review pending reservations, approve or reject reservations, and cancel reservations |
 | Regular user | Can register usage and reserve MKS areas during opening hours |
 | Guest | Can only view public reservation information |
 
@@ -137,7 +198,7 @@ Frontend Website
   v
 Backend Server
   |
-  | ORM / SQL
+  | Mongoose / MongoDB
   v
 Database
 ```
@@ -268,11 +329,9 @@ Models handle table definitions and database operations, such as:
 | Page | Features |
 | --- | --- |
 | Register Page | Create an account using student ID, password, and personal email |
-| Login Page | User login using student ID and password |
-| Dashboard / Current Status Page | Shows current usage status for Meeting Area, Soldering Table, 3DP Area, and Heavy Processing Area in separate sections |
-| Reservation Calendar Page | Shows reservations by area and allows users to create new reservations |
-| My Reservations | Allows users to view, update, or cancel their own reservations |
-| Admin Dashboard | Allows administrators to manage users, areas, reservations, and approvals |
+| Login Page | User login using student ID and password, with optional admin session login |
+| Dashboard / Current Status Page | Shows current usage status, allows creating reservations, and includes a "My Reservations" panel |
+| Admin Reservation Review | Allows administrators to review pending reservations and approve or reject them |
 
 ## API Design
 
@@ -285,13 +344,16 @@ POST /api/auth/logout
 GET  /api/auth/me
 ```
 
-The first reservation flow can also create a user account if the student ID does not exist yet.
+The current implementation does **not** auto-create user accounts during the reservation flow. Registration must be completed first.
+
+`POST /api/auth/login` also supports requesting an admin session when the user provides valid account credentials plus the server-side admin access password.
 
 ### Areas
 
 ```txt
 GET /api/areas
 GET /api/areas/status
+GET /api/areas/:id/availability
 GET /api/areas/:id/status
 ```
 
@@ -327,7 +389,7 @@ backend/src/services/area.service.js
 Decision flow:
 
 1. Get the current time
-2. For each area, search for approved reservations where the current time is between `start_time` and `end_time`
+2. For each area, search for `approved` and `pending` reservations where the current time is between `start_time` and `end_time`
 3. Count how many seats, machines, or slots are currently being used
 4. Compare the current usage with the area's reservation limit
 5. Show whether the area is available, partially occupied, or full
@@ -380,7 +442,8 @@ Decision flow:
 4. If the area still has enough capacity, create the reservation
 5. If the area is full, reject the reservation
 6. New reservations are created with `pending` status by default
-7. Admins can approve or reject pending reservations
+7. Pending reservations also count toward availability until reviewed
+8. Admins can approve or reject pending reservations
 
 Example:
 
@@ -557,13 +620,11 @@ If time is limited, the minimum viable version should include:
 4. Current usage status for each area
 5. Create, view, and cancel reservations
 6. Reservation limit checking based on selected area
-7. First-time reservation account creation
-8. Dashboard sections separated by reservation area
-9. Admin view for all reservations
+7. Dashboard sections separated by reservation area
+8. Pending reservation review for admins
 
 After completing the MVP, the following features can be added:
 
-- Reservation approval workflow
 - Special opening hour settings
 - User permission management
 - Reservation history search

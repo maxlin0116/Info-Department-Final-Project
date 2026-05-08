@@ -208,7 +208,7 @@ exports.createReservation = async (user, data) => {
     project,
     startTime,
     endTime,
-    status: "approved",
+    status: "pending",
   });
 
   await reservation.populate("user");

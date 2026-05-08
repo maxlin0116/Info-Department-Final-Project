@@ -35,12 +35,17 @@ exports.login = async (req, res, next) => {
   try {
     const studentId = req.body.studentId ?? req.body.student_id;
     const password = req.body.password;
+    const asAdmin = req.body.asAdmin === true;
+    const adminPassword = req.body.adminPassword ?? req.body.admin_password;
 
     if (!studentId || !password) {
       return res.status(400).json({ error: "Please provide student ID and password" });
     }
 
-    const result = await authService.loginUser(studentId, password);
+    const result = await authService.loginUser(studentId, password, {
+      asAdmin,
+      adminPassword,
+    });
     res.status(200).json({ message: "Login successful", ...result });
   } catch (error) {
     next(error);
