@@ -191,8 +191,22 @@ export function ReservationModal({
       return [];
     }
 
+    const now = new Date();
+    const isToday = new Date(selectedDateAvailability.date).toDateString() === now.toDateString();
+
     return selectedDateAvailability.slots
-      .filter((slot) => slot.isOpen && slot.remainingCapacity >= selectedPeople)
+      .filter((slot) => {
+        if (!slot.isOpen || slot.remainingCapacity < selectedPeople) {
+          return false;
+        }
+
+        if (isToday) {
+          const slotDateTime = new Date(`${selectedDateAvailability.date}T${slot.time}:00`);
+          return slotDateTime > now;
+        }
+
+        return true;
+      })
       .map((slot) => slot.time);
   }, [selectedDateAvailability, selectedPeople]);
 
@@ -601,14 +615,18 @@ export function ReservationModal({
                         }
 
                         const isSelected = date === day.date && startTime !== "" && endTime !== "" && slotTime >= startTime && slotTime < endTime;
-                        const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople;
+                        const slotDateTime = new Date(`${day.date}T${slotTime}:00`);
+                        const isPast = slotDateTime < new Date();
+                        const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople && !isPast;
                         const title = !slot.isOpen
                           ? "Offline"
-                          : slot.remainingCapacity < selectedPeople
-                            ? "Saturation: " + slot.remainingCapacity + " left"
-                            : slot.hasReservation
-                              ? String(slot.occupiedCount) + " ACTIVE, " + String(slot.remainingCapacity) + " FREE"
-                              : "READY";
+                          : isPast
+                            ? "Expired"
+                            : slot.remainingCapacity < selectedPeople
+                              ? "Saturation: " + slot.remainingCapacity + " left"
+                              : slot.hasReservation
+                                ? String(slot.occupiedCount) + " ACTIVE, " + String(slot.remainingCapacity) + " FREE"
+                                : "READY";
                         
                         return (
                           <motion.button
@@ -619,7 +637,7 @@ export function ReservationModal({
                             disabled={!isClickable}
                             title={title}
                             className={`w-20 h-8 border m-[0.5px] rounded-[1px] transition-all duration-150 ${
-                              !slot.isOpen ? "bg-slate-950 border-slate-800/50 cursor-not-allowed" :
+                              !slot.isOpen || isPast ? "bg-slate-950 border-slate-800/50 cursor-not-allowed" :
                               slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/30 cursor-not-allowed" :
                               isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[inset_0_0_10px_rgba(16,185,129,0.2)] z-1" :
                               "bg-slate-900/40 border-slate-800/50 cursor-pointer"

@@ -139,6 +139,10 @@ async function validateReservationWindow(area, startTime, endTime, participantCo
     throw createError(400, "Reservation failed. The requested time falls outside opening hours, during a break, or on a weekend.");
   }
 
+  if (startTime < new Date()) {
+    throw createError(400, "Reservation failed. Cannot make a reservation for a past time.");
+  }
+
   const currentUsedCount = await getOverlappingParticipantCount(area._id, startTime, endTime, excludeReservationId);
   const remainingCapacity = area.maxCapacity - currentUsedCount;
 
