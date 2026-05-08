@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 
 const JWT_EXPIRES_IN = "7d";
+const STUDENT_ID_REGEX = /^[a-zA-Z]\d{8}$/;
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || "development-only-secret";
@@ -62,6 +63,10 @@ exports.registerUser = async (userData) => {
 
   if (!name || !grade || !studentId || !password || !personalEmail) {
     throw createError(400, "All fields are required");
+  }
+
+  if (!STUDENT_ID_REGEX.test(studentId)) {
+    throw createError(400, "Student ID must be one letter followed by 8 digits");
   }
 
   const existingUser = await User.findOne({ studentId });

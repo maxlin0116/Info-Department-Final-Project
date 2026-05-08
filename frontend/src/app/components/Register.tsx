@@ -3,6 +3,16 @@ import { Link, Navigate, useNavigate } from "react-router";
 import { Cpu, ArrowRight } from "lucide-react";
 import { useAuth } from "../auth";
 
+const STUDENT_ID_REGEX = /^[a-zA-Z]\d{8}$/;
+const GRADE_OPTIONS = [
+  "Freshman",
+  "Sophomore",
+  "Junior",
+  "Senior",
+  "Master's",
+  "PhD",
+];
+
 export function Register() {
   const navigate = useNavigate();
   const { register, isAuthenticated } = useAuth();
@@ -21,6 +31,17 @@ export function Register() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
+
+    if (!grade) {
+      setError("Please select your grade");
+      return;
+    }
+
+    if (!STUDENT_ID_REGEX.test(studentId.trim())) {
+      setError("Student ID must be one letter followed by 8 digits");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
@@ -28,10 +49,15 @@ export function Register() {
     }
 
     setSubmitting(true);
-    setError(null);
 
     try {
-      await register({ name, grade, studentId, personalEmail, password });
+      await register({
+        name,
+        grade,
+        studentId: studentId.trim(),
+        personalEmail,
+        password,
+      });
       navigate("/", { replace: true });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Registration failed");
@@ -68,14 +94,21 @@ export function Register() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Grade</label>
-                <input
-                  type="text"
+                <select
                   required
                   value={grade}
                   onChange={(event) => setGrade(event.target.value)}
-                  placeholder="e.g. Senior"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-                />
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                >
+                  <option value="" disabled>
+                    Select your grade
+                  </option>
+                  {GRADE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -86,9 +119,10 @@ export function Register() {
                 required
                 value={studentId}
                 onChange={(event) => setStudentId(event.target.value)}
-                placeholder="e.g. b10901001"
+                placeholder="One letter + 8 digits"
                 className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
+              <p className="text-xs text-slate-500">Example: b10901001</p>
             </div>
 
             <div className="space-y-1.5">

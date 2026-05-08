@@ -2,9 +2,7 @@ const Area = require("../models/area.model");
 const Reservation = require("../models/reservation.model");
 const OpeningHour = require("../models/openingHour.model");
 
-const GRID_START_MINUTES = 10 * 60;
-const GRID_END_MINUTES = 21 * 60 + 30;
-const SLOT_SIZE_MINUTES = 30;
+const SLOT_ALIGNMENT_MINUTES = 30;
 const DEFAULT_AVAILABILITY_DAYS = 5;
 const MAX_AVAILABILITY_DAYS = 10;
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -90,19 +88,50 @@ function getNextWeekdays(startDate, count) {
   return dates;
 }
 
-function generateGridTimes() {
-  const slots = [];
-  for (let minutes = GRID_START_MINUTES; minutes <= GRID_END_MINUTES; minutes += SLOT_SIZE_MINUTES) {
-    slots.push(minutesToTime(minutes));
-  }
-  return slots;
+function getAlignedMinutesAfter(value) {
+  return Math.ceil(value / SLOT_ALIGNMENT_MINUTES) * SLOT_ALIGNMENT_MINUTES;
 }
 
-function isSlotOpenForMinutes(openingHours, slotMinutes) {
-  return openingHours.some((entry) => {
+function buildSlotRangesForOpeningHours(openingHours) {
+  const sortedHours = [...openingHours].sort(
+    (left, right) => timeToMinutes(left.openTime) - timeToMinutes(right.openTime)
+  );
+
+  return sortedHours.flatMap((entry) => {
     const openMinutes = timeToMinutes(entry.openTime);
     const closeMinutes = timeToMinutes(entry.closeTime);
-    return slotMinutes >= openMinutes && slotMinutes < closeMinutes;
+    const internalAnchors = [];
+
+    for (
+      let minutes = getAlignedMinutesAfter(openMinutes);
+      minutes < closeMinutes;
+      minutes += SLOT_ALIGNMENT_MINUTES
+    ) {
+      if (minutes > openMinutes) {
+        internalAnchors.push(minutes);
+      }
+    }
+
+    if (openMinutes % SLOT_ALIGNMENT_MINUTES !== 0 && internalAnchors.length > 0) {
+      internalAnchors.shift();
+    }
+
+    if (closeMinutes % SLOT_ALIGNMENT_MINUTES !== 0 && internalAnchors.length > 0) {
+      internalAnchors.pop();
+    }
+
+    const boundaries = [openMinutes, ...internalAnchors, closeMinutes];
+
+    return boundaries.slice(0, -1).map((startMinutes, index) => {
+      const endMinutes = boundaries[index + 1];
+
+      return {
+        time: minutesToTime(startMinutes),
+        endTime: minutesToTime(endMinutes),
+        startMinutes,
+        endMinutes,
+      };
+    });
   });
 }
 
@@ -187,23 +216,21 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
     openingHoursByDay.get(entry.dayOfWeek).push(entry);
   }
 
-  const gridTimes = generateGridTimes();
-
   return {
     area: toAreaPayload(area),
     dates: dates.map((date) => {
       const dayOfWeek = date.getDay();
       const dayOpeningHours = openingHoursByDay.get(dayOfWeek) || [];
+      const daySlotRanges = buildSlotRangesForOpeningHours(dayOpeningHours);
 
       return {
         date: formatDate(date),
         dayLabel: DAY_LABELS[dayOfWeek],
         display: formatDisplayDate(date),
-        slots: gridTimes.map((time) => {
-          const slotMinutes = timeToMinutes(time);
-          const slotStart = setTimeOnDate(date, slotMinutes);
-          const slotEnd = new Date(slotStart.getTime() + SLOT_SIZE_MINUTES * 60 * 1000);
-          const isOpen = area.isActive && isSlotOpenForMinutes(dayOpeningHours, slotMinutes);
+        slots: daySlotRanges.map((slotRange) => {
+          const slotStart = setTimeOnDate(date, slotRange.startMinutes);
+          const slotEnd = setTimeOnDate(date, slotRange.endMinutes);
+          const isOpen = area.isActive;
 
           const occupiedCount = reservations.reduce((sum, reservation) => {
             return overlaps(slotStart, slotEnd, new Date(reservation.startTime), new Date(reservation.endTime))
@@ -214,7 +241,8 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
           const remainingCapacity = Math.max(area.maxCapacity - occupiedCount, 0);
 
           return {
-            time,
+            time: slotRange.time,
+            endTime: slotRange.endTime,
             isOpen,
             occupiedCount,
             remainingCapacity,

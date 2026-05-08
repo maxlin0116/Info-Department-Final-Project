@@ -15,6 +15,7 @@ interface ReservationModalProps {
 
 interface AvailabilitySlot {
   time: string;
+  endTime: string;
   isOpen: boolean;
   occupiedCount: number;
   remainingCapacity: number;
@@ -47,14 +48,7 @@ interface PlannedItemPayload {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")
   : "";
-
-function addMinutesToTime(time: string, deltaMinutes: number) {
-  const [hours, minutes] = time.split(":").map(Number);
-  const total = hours * 60 + minutes + deltaMinutes;
-  const nextHours = Math.floor(total / 60);
-  const nextMinutes = total % 60;
-  return String(nextHours).padStart(2, "0") + ":" + String(nextMinutes).padStart(2, "0");
-}
+const BASE_SLOT_HEIGHT_PX = 32;
 
 function toIsoDateTime(date: string, time: string) {
   return new Date(date + "T" + time + ":00").toISOString();
@@ -86,6 +80,54 @@ function parsePlannedItems(input: string): PlannedItemPayload[] {
     }));
 }
 
+function toSortedUniqueTimes(times: string[]) {
+  return [...new Set(times)].sort((left, right) => left.localeCompare(right));
+}
+
+function getDurationMinutes(startTime: string, endTime: string) {
+  const [startHours, startMinutes] = startTime.split(":").map(Number);
+  const [endHours, endMinutes] = endTime.split(":").map(Number);
+  return endHours * 60 + endMinutes - (startHours * 60 + startMinutes);
+}
+
+function formatSlotLabel(startTime: string, endTime: string) {
+  return `${startTime}-${endTime}`;
+}
+
+function buildSelectedSlots(
+  selectedDateAvailability: AvailabilityDate | null,
+  startTime: string,
+  endTime: string
+) {
+  if (!selectedDateAvailability || !startTime || !endTime) {
+    return [];
+  }
+
+  const startIndex = selectedDateAvailability.slots.findIndex((slot) => slot.time === startTime);
+  if (startIndex === -1) {
+    return [];
+  }
+
+  const selectedSlots: AvailabilitySlot[] = [];
+
+  for (let index = startIndex; index < selectedDateAvailability.slots.length; index += 1) {
+    const slot = selectedDateAvailability.slots[index];
+    const previousSlot = selectedSlots[selectedSlots.length - 1];
+
+    if (previousSlot && previousSlot.endTime !== slot.time) {
+      break;
+    }
+
+    selectedSlots.push(slot);
+
+    if (slot.endTime === endTime) {
+      return selectedSlots;
+    }
+  }
+
+  return [];
+}
+
 export function ReservationModal({
   isOpen,
   onClose,
@@ -113,7 +155,18 @@ export function ReservationModal({
 
   const effectiveMaxCapacity = availability?.area.maxCapacity ?? maxCapacity;
   const selectedPeople = Math.max(1, Number.parseInt(people, 10) || 1);
-  const gridSlots = availability?.dates[0]?.slots.map((slot) => slot.time) ?? [];
+  const gridRows = useMemo(() => {
+    const slots = availability?.dates.flatMap((entry) => entry.slots) ?? [];
+    const rowMap = new Map<string, { time: string; endTime: string }>();
+
+    for (const slot of slots) {
+      if (!rowMap.has(slot.time)) {
+        rowMap.set(slot.time, { time: slot.time, endTime: slot.endTime });
+      }
+    }
+
+    return [...rowMap.values()].sort((left, right) => left.time.localeCompare(right.time));
+  }, [availability]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -224,28 +277,66 @@ export function ReservationModal({
 
     for (let index = startIndex; index < selectedDateAvailability.slots.length; index += 1) {
       const slot = selectedDateAvailability.slots[index];
+      const previousSlot = index > startIndex ? selectedDateAvailability.slots[index - 1] : null;
+
+      if (previousSlot && previousSlot.endTime !== slot.time) {
+        break;
+      }
+
       if (!slot.isOpen || slot.remainingCapacity < selectedPeople) {
         break;
       }
 
-      endTimes.push(addMinutesToTime(slot.time, 30));
+      endTimes.push(slot.endTime);
     }
 
     return endTimes;
   }, [selectedDateAvailability, startTime, selectedPeople]);
 
-  useEffect(() => {
-    if (startTime && !availableStartTimes.includes(startTime)) {
-      setStartTime("");
-      setEndTime("");
-    }
+  const selectedStartTimeOptions = useMemo(() => {
+    return startTime ? toSortedUniqueTimes([...availableStartTimes, startTime]) : availableStartTimes;
   }, [availableStartTimes, startTime]);
 
-  useEffect(() => {
-    if (endTime && !availableEndTimes.includes(endTime)) {
-      setEndTime("");
-    }
+  const selectedEndTimeOptions = useMemo(() => {
+    return endTime ? toSortedUniqueTimes([...availableEndTimes, endTime]) : availableEndTimes;
   }, [availableEndTimes, endTime]);
+
+  const selectedDateSlotMap = useMemo(() => {
+    return new Map((selectedDateAvailability?.slots ?? []).map((slot) => [slot.time, slot.endTime]));
+  }, [selectedDateAvailability]);
+
+  const selectedSlots = useMemo(() => {
+    return buildSelectedSlots(selectedDateAvailability, startTime, endTime);
+  }, [selectedDateAvailability, startTime, endTime]);
+
+  const selectedSlotTimes = useMemo(() => {
+    return new Set(selectedSlots.map((slot) => slot.time));
+  }, [selectedSlots]);
+
+  const selectionCapacityIssue = useMemo(() => {
+    if (!selectedDateAvailability || !startTime || !endTime) {
+      return null;
+    }
+
+    if (selectedSlots.length === 0) {
+      return "Please choose a valid reservation time range.";
+    }
+
+    if (selectedSlots.some((slot) => !slot.isOpen)) {
+      return "The selected time range includes unavailable time slots.";
+    }
+
+    const minimumRemainingCapacity = selectedSlots.reduce(
+      (minimum, slot) => Math.min(minimum, slot.remainingCapacity),
+      Number.POSITIVE_INFINITY
+    );
+
+    if (minimumRemainingCapacity < selectedPeople) {
+      return `The selected time range only has ${Math.max(minimumRemainingCapacity, 0)} remaining spot(s) for ${selectedPeople} participant(s).`;
+    }
+
+    return null;
+  }, [selectedDateAvailability, startTime, endTime, selectedPeople, selectedSlots]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -309,7 +400,7 @@ export function ReservationModal({
       return;
     }
 
-    const clickedEndTime = addMinutesToTime(slot.time, 30);
+    const clickedEndTime = slot.endTime;
 
     if (date !== day.date || !startTime) {
       setDate(day.date);
@@ -336,7 +427,8 @@ export function ReservationModal({
     setEndTime(clickedEndTime);
   };
 
-  const submitDisabled = !isAuthenticated || loading || submitting || !date || !startTime || !endTime;
+  const submitDisabled =
+    !isAuthenticated || loading || submitting || !date || !startTime || !endTime || Boolean(selectionCapacityIssue);
 
   return (
     <AnimatePresence>
@@ -459,9 +551,9 @@ export function ReservationModal({
                         <Clock className="w-3 h-3" />
                         Time_Range
                       </label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <select
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <select
                             required
                             disabled={!date}
                             value={startTime}
@@ -470,13 +562,15 @@ export function ReservationModal({
                               setEndTime("");
                             }}
                             className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none text-xs font-mono disabled:opacity-50 cursor-pointer"
-                          >
-                            <option value="" disabled>START_T</option>
-                            {availableStartTimes.map((time) => (
-                              <option key={time} value={time}>{time}</option>
+                        >
+                          <option value="" disabled>START_T</option>
+                          {selectedStartTimeOptions.map((time) => (
+                              <option key={time} value={time}>
+                                {formatSlotLabel(time, selectedDateSlotMap.get(time) ?? time)}
+                              </option>
                             ))}
                           </select>
-                        </div>
+                      </div>
                         <span className="text-slate-600 font-mono">-</span>
                         <div className="flex-1">
                           <select
@@ -485,10 +579,12 @@ export function ReservationModal({
                             value={endTime}
                             onChange={(event) => setEndTime(event.target.value)}
                             className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none text-xs font-mono disabled:opacity-50 cursor-pointer"
-                          >
-                            <option value="" disabled>END_T</option>
-                            {availableEndTimes.map((time) => (
-                              <option key={time} value={time}>{time}</option>
+                        >
+                          <option value="" disabled>END_T</option>
+                          {selectedEndTimeOptions.map((time) => (
+                              <option key={time} value={time}>
+                                {startTime ? `${startTime}-${time}` : time}
+                              </option>
                             ))}
                           </select>
                         </div>
@@ -496,10 +592,10 @@ export function ReservationModal({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">
-                        <UsersIcon className="w-3 h-3" />
-                        Cap_Count
-                        <span className="text-[10px] text-slate-600 font-normal ml-auto">MAX: {effectiveMaxCapacity}</span>
+                      <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                        <UsersIcon className="w-4 h-4 text-slate-500" />
+                        Number of People
+                        <span className="text-xs text-slate-500 font-normal ml-auto">Max capacity: {effectiveMaxCapacity}</span>
                       </label>
                       <input
                         type="number"
@@ -515,40 +611,59 @@ export function ReservationModal({
                             setPeople(event.target.value);
                           }
                         }}
-                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono text-sm"
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                       />
+                      <p className={`text-xs ${selectionCapacityIssue ? "text-amber-300" : "text-slate-500"}`}>
+                        {selectionCapacityIssue
+                          ? selectionCapacityIssue
+                          : "Selected time stays locked even if the participant count exceeds slot capacity."}
+                      </p>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500">Session_Purpose</label>
+                      <label className="text-sm font-medium text-slate-300">Purpose</label>
                       <input
                         type="text"
                         value={purpose}
                         onChange={(event) => setPurpose(event.target.value)}
-                        placeholder="ENTER_PURPOSE"
-                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono text-sm"
+                        placeholder="Purpose of use"
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500">Planned_Items</label>
+                      <label className="text-sm font-medium text-slate-300">Planned Items</label>
                       <textarea
-                        rows={2}
+                        rows={3}
                         value={plannedItemsInput}
                         onChange={(event) => setPlannedItemsInput(event.target.value)}
-                        placeholder={"ITEM_A\nITEM_B"}
-                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none font-mono text-xs"
+                        placeholder={"One item per line\nArduino series\nESP series\nBreadboard"}
+                        className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
+                      />
+                      <p className="text-xs text-slate-500">
+                        Optional list of items or equipment the user plans to use.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-slate-300">Project</label>
+                      <textarea
+                        rows={3}
+                        value={projectNotes}
+                        onChange={(event) => setProjectNotes(event.target.value)}
+                        placeholder="Optional project name or project description"
+                        className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500">Project_Ref</label>
-                      <input
-                        type="text"
-                        value={projectNotes}
-                        onChange={(event) => setProjectNotes(event.target.value)}
-                        placeholder="PROJECT_IDENT"
-                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono text-sm"
+                      <label className="text-sm font-medium text-slate-300">When2meet</label>
+                      <textarea
+                        rows={2}
+                        value={when2meet}
+                        onChange={(event) => setWhen2meet(event.target.value)}
+                        placeholder={"Optional scheduling reference\nor when2meet link"}
+                        className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
                       />
                     </div>
 
@@ -603,18 +718,36 @@ export function ReservationModal({
                     ))}
                   </div>
 
-                  {gridSlots.map((slotTime) => (
+                  {gridRows.map((row) => {
+                    const slotTime = row.time;
+                    const rowHeight = Math.max(
+                      28,
+                      Math.round((BASE_SLOT_HEIGHT_PX * getDurationMinutes(row.time, row.endTime)) / 30)
+                    );
+
+                    return (
                     <div key={slotTime} className="flex group">
-                      <div className="w-16 shrink-0 text-right pr-4 py-1.5 text-[9px] font-mono font-medium text-slate-600 self-center group-hover:text-slate-400 transition-colors">
-                        {slotTime}
+                      <div
+                        style={{ height: `${rowHeight}px` }}
+                        className="w-20 shrink-0 pr-3 text-[9px] font-mono font-medium text-slate-600 flex flex-col items-end justify-center leading-tight group-hover:text-slate-400 transition-colors"
+                      >
+                        <span>{row.time}</span>
+                        <span className="text-[8px] text-slate-700">{row.endTime}</span>
                       </div>
                       {availability?.dates.map((day) => {
                         const slot = day.slots.find((entry) => entry.time === slotTime);
                         if (!slot) {
-                          return <div key={day.date + "-" + slotTime} className="w-20 h-8 border border-slate-800/30 m-[0.5px] rounded-[1px] bg-slate-950/80" />;
+                          return (
+                            <div
+                              key={day.date + "-" + slotTime}
+                              style={{ height: `${rowHeight}px` }}
+                              className="w-20 border border-slate-800/30 m-[0.5px] rounded-[1px] bg-slate-950/80"
+                            />
+                          );
                         }
 
-                        const isSelected = date === day.date && startTime !== "" && endTime !== "" && slotTime >= startTime && slotTime < endTime;
+                        const isSelected =
+                          date === day.date && startTime !== "" && endTime !== "" && selectedSlotTimes.has(slot.time);
                         const slotDateTime = new Date(`${day.date}T${slotTime}:00`);
                         const isPast = slotDateTime < new Date();
                         const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople && !isPast;
@@ -623,20 +756,21 @@ export function ReservationModal({
                           : isPast
                             ? "Expired"
                             : slot.remainingCapacity < selectedPeople
-                              ? "Saturation: " + slot.remainingCapacity + " left"
+                              ? `${slot.time}-${slot.endTime} · Saturation: ${slot.remainingCapacity} left`
                               : slot.hasReservation
-                                ? String(slot.occupiedCount) + " ACTIVE, " + String(slot.remainingCapacity) + " FREE"
-                                : "READY";
+                                ? `${slot.time}-${slot.endTime} · ${String(slot.occupiedCount)} ACTIVE, ${String(slot.remainingCapacity)} FREE`
+                                : `${slot.time}-${slot.endTime} · READY`;
                         
                         return (
                           <motion.button
                             key={day.date + "-" + slotTime}
                             type="button"
+                            style={{ height: `${rowHeight}px` }}
                             whileHover={isClickable ? { backgroundColor: isSelected ? "rgba(16, 185, 129, 0.4)" : "rgba(30, 41, 59, 0.8)" } : {}}
                             onClick={() => handleSlotClick(day, slot)}
                             disabled={!isClickable}
                             title={title}
-                            className={`w-20 h-8 border m-[0.5px] rounded-[1px] transition-all duration-150 ${
+                            className={`w-20 border m-[0.5px] rounded-[1px] transition-all duration-150 ${
                               !slot.isOpen || isPast ? "bg-slate-950 border-slate-800/50 cursor-not-allowed" :
                               slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/30 cursor-not-allowed" :
                               isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[inset_0_0_10px_rgba(16,185,129,0.2)] z-1" :
@@ -646,7 +780,7 @@ export function ReservationModal({
                         );
                       })}
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             </div>

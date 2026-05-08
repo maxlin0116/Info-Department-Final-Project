@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 const STORAGE_KEY = "mks-auth";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
@@ -58,6 +58,31 @@ function normalizeUser(payload: unknown): AuthUser {
   };
 }
 
+function decodeJwtPayload(token: string) {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    return JSON.parse(window.atob(padded)) as { exp?: unknown };
+  } catch {
+    return null;
+  }
+}
+
+function getTokenExpirationTime(token: string) {
+  const payload = decodeJwtPayload(token);
+  return payload && typeof payload.exp === "number" ? payload.exp * 1000 : null;
+}
+
+function isExpiredToken(token: string) {
+  const expirationTime = getTokenExpirationTime(token);
+  return expirationTime !== null && expirationTime <= Date.now();
+}
+
 function loadStoredAuth(): AuthState {
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) {
@@ -66,8 +91,15 @@ function loadStoredAuth(): AuthState {
 
   try {
     const parsed = JSON.parse(raw) as Partial<AuthState>;
+    const token = typeof parsed.token === "string" ? parsed.token : null;
+
+    if (token && isExpiredToken(token)) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return { token: null, user: null };
+    }
+
     return {
-      token: typeof parsed.token === "string" ? parsed.token : null,
+      token,
       user: parsed.user ? normalizeUser(parsed.user) : null,
     };
   } catch {
@@ -174,6 +206,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthState(nextState);
     persistAuth(nextState);
   };
+
+  useEffect(() => {
+    if (!authState.token) {
+      return;
+    }
+
+    const expirationTime = getTokenExpirationTime(authState.token);
+    if (expirationTime === null) {
+      return;
+    }
+
+    const timeoutMs = expirationTime - Date.now();
+    if (timeoutMs <= 0) {
+      logout();
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      logout();
+    }, timeoutMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [authState.token]);
 
   return (
     <AuthContext.Provider
