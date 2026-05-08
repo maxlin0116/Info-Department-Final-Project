@@ -12,7 +12,54 @@ const adminRoutes = require("./routes/admin.routes");
 const app = express();
 const port = process.env.PORT || 8000;
 
-app.use(cors());
+function parseAllowedOrigins(value) {
+  return (value || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesOrigin(pattern, origin) {
+  if (pattern === "*") {
+    return true;
+  }
+
+  if (!pattern.includes("*")) {
+    return pattern === origin;
+  }
+
+  const regex = new RegExp(
+    `^${pattern.split("*").map((segment) => escapeRegex(segment)).join(".*")}$`
+  );
+
+  return regex.test(origin);
+}
+
+const configuredOrigins = parseAllowedOrigins(
+  process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN
+);
+const defaultDevOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
+const allowedOrigins = configuredOrigins.length > 0 ? configuredOrigins : defaultDevOrigins;
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.some((pattern) => matchesOrigin(pattern, origin))) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+  })
+);
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
@@ -22,6 +69,10 @@ app.use("/api/admin", adminRoutes);
 
 app.get("/", (_req, res) => {
   res.json({ message: "MKS Reservation API" });
+});
+
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({ ok: true });
 });
 
 app.use((error, _req, res, _next) => {

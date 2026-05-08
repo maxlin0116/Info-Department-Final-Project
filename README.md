@@ -96,6 +96,81 @@ Default local URLs:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 
+## Production Deployment
+
+Recommended production setup for this project:
+
+- Frontend: Vercel
+- Backend: Render Web Service
+- Database: MongoDB Atlas
+
+### 1. MongoDB Atlas
+
+Create or reuse an Atlas cluster, then prepare:
+
+- A database user for the application
+- A connection string for `MONGODB_URI`
+- A project IP Access List entry that allows your deployed backend to connect
+
+Atlas only allows clients whose IP or CIDR is listed in the project's IP Access List. If you cannot provide a fixed backend egress address, the simplest hosted setup is often to temporarily allow `0.0.0.0/0`, but Atlas warns that this allows access from anywhere and should be used carefully with strong database credentials.
+
+### 2. Deploy the Backend to Render
+
+Create a new Render Web Service from this repository and set the service root directory to `backend`.
+
+Recommended Render settings:
+
+- Build Command: `npm install`
+- Start Command: `npm start`
+
+Required environment variables:
+
+- `MONGODB_URI`
+- `JWT_SECRET`
+- `ADMIN_ACCESS_PASSWORD`
+- `FRONTEND_ORIGIN`
+
+Example:
+
+```txt
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>?retryWrites=true&w=majority
+JWT_SECRET=<long-random-secret>
+ADMIN_ACCESS_PASSWORD=<admin-password>
+FRONTEND_ORIGIN=https://your-frontend.vercel.app
+```
+
+The backend also exposes a health endpoint at:
+
+```txt
+/api/health
+```
+
+### 3. Deploy the Frontend to Vercel
+
+Create a Vercel project that uses the `frontend` directory as the project root.
+
+Required environment variable:
+
+```txt
+VITE_API_BASE_URL=https://your-backend.onrender.com
+```
+
+This repository includes `frontend/vercel.json` so browser refreshes and direct links in the React SPA rewrite to `index.html`.
+
+### 4. Update CORS
+
+After the Vercel project has a stable production domain, set Render's:
+
+```txt
+FRONTEND_ORIGIN=https://your-frontend.vercel.app
+```
+
+If you also want Vercel preview deployments to work against the same backend, you can provide a comma-separated list or a wildcard pattern such as:
+
+```txt
+FRONTEND_ORIGINS=https://your-frontend.vercel.app,https://*-your-team.vercel.app
+```
+
 ## Account Requirements
 
 Users need to create an account before making reservations.
