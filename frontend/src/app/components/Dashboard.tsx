@@ -10,10 +10,12 @@ import {
   Users,
   XCircle,
   Zap,
+  History as HistoryIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { ReservationModal } from "./ReservationModal";
+import { ReservationHistory } from "./ReservationHistory";
 import { useAuth } from "../auth";
 
 type Status = "available" | "occupied" | "maintenance";
@@ -380,6 +382,7 @@ export function Dashboard() {
   const [actingReservationId, setActingReservationId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
   const isAdmin = user?.role === "admin";
   const shouldReduceMotion = useReducedMotion();
 
@@ -392,6 +395,14 @@ export function Dashboard() {
       cancelHint: getCancelHint(reservation, now, isAdmin),
     }));
   }, [myReservations, isAdmin]);
+
+  const activeReservations = useMemo(() => {
+    return enrichedReservations.filter((r) => 
+      r.derivedStatus !== "Completed" && 
+      r.status !== "cancelled" && 
+      r.status !== "rejected"
+    );
+  }, [enrichedReservations]);
 
   const handleReserve = (area: AreaSummary) => {
     setSelectedArea(area);
@@ -543,6 +554,17 @@ export function Dashboard() {
     }
   };
 
+  if (showHistory) {
+    return (
+      <ReservationHistory
+        reservations={enrichedReservations}
+        loading={loadingReservations}
+        error={reservationsError}
+        onBack={() => setShowHistory(false)}
+      />
+    );
+  }
+
   return (
     <>
       <motion.div
@@ -590,9 +612,18 @@ export function Dashboard() {
         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-800 bg-slate-900/20">
           <div>
             <h2 className="text-lg font-semibold text-slate-100 font-mono">My Reservations</h2>
-            <p className="text-sm text-slate-400 mt-1 font-sans">Track your terminal session bookings.</p>
+            <p className="text-sm text-slate-400 mt-1 font-sans">Track your active terminal sessions.</p>
           </div>
-          <CalendarClock className="w-5 h-5 text-slate-500 shrink-0" />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-slate-100 hover:border-slate-500 transition-all cursor-pointer"
+            >
+              <HistoryIcon className="w-3.5 h-3.5" />
+              VIEW_HISTORY
+            </button>
+            <CalendarClock className="w-5 h-5 text-slate-500 shrink-0" />
+          </div>
         </div>
 
         {!isAuthenticated ? (
@@ -608,12 +639,20 @@ export function Dashboard() {
           <div className="px-5 py-6 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20 font-mono">
             {reservationsError}
           </div>
-        ) : enrichedReservations.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-slate-400 font-mono italic">NO_ACTIVE_RESERVATIONS_FOUND</div>
+        ) : activeReservations.length === 0 ? (
+          <div className="px-5 py-10 text-center text-slate-500 font-mono italic">
+            NO_ACTIVE_RESERVATIONS_FOUND
+            <button 
+              onClick={() => setShowHistory(true)}
+              className="block mx-auto mt-2 text-xs text-emerald-500/70 hover:text-emerald-400 underline"
+            >
+              CHECK_ARCHIVED_HISTORY
+            </button>
+          </div>
         ) : (
           <div className="divide-y divide-slate-800">
             <AnimatePresence mode="popLayout">
-              {enrichedReservations.map((reservation, i) => (
+              {activeReservations.map((reservation, i) => (
                 <motion.div
                   key={reservation.id}
                   initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: -10 }}
