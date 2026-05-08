@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, LogIn } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
 
 interface ReservationModalProps {
@@ -108,6 +109,7 @@ export function ReservationModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   const effectiveMaxCapacity = availability?.area.maxCapacity ?? maxCapacity;
   const selectedPeople = Math.max(1, Number.parseInt(people, 10) || 1);
@@ -231,10 +233,6 @@ export function ReservationModal({
     }
   }, [availableEndTimes, endTime]);
 
-  if (!isOpen) {
-    return null;
-  }
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -327,314 +325,316 @@ export function ReservationModal({
   const submitDisabled = !isAuthenticated || loading || submitting || !date || !startTime || !endTime;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 overflow-y-auto bg-slate-950/80 backdrop-blur-sm">
-      <div className="relative my-auto w-full max-w-5xl max-h-[calc(100vh-2rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors z-10"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+          />
 
-        <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50 overflow-y-auto">
-          <div className="mb-6">
-            <h2 className="text-xl font-bold text-slate-100 mb-1">Reserve Space</h2>
-            <p className="text-sm text-emerald-400 font-medium tracking-wide">{resourceName}</p>
-          </div>
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="relative my-auto w-full max-w-5xl max-h-[calc(100vh-2rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10"
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors z-10 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-          {isSuccess ? (
-              <div className="flex flex-col items-center justify-center h-64 text-center animate-in fade-in zoom-in duration-300">
-              <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-100">Reservation Submitted</h3>
-              <p className="text-sm text-slate-400 mt-2">Your booking is saved and waiting for admin review.</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {!isAuthenticated ? (
-                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
-                  <div className="font-medium">Login required</div>
-                  <div className="mt-1 text-sky-100/80">You can browse availability first, but only signed-in users can submit reservations.</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      navigate("/login");
-                    }}
-                    className="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-medium text-sky-100 hover:bg-sky-400/20"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    Go to Login
-                  </button>
-                </div>
-              ) : null}
-
-              {error ? (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                  {error}
-                </div>
-              ) : null}
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500" />
-                  Select Date
-                </label>
-                <div className="relative">
-                  <select
-                    required
-                    disabled={loading || !availability}
-                    value={date}
-                    onChange={(event) => {
-                      setDate(event.target.value);
-                      setStartTime("");
-                      setEndTime("");
-                    }}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <option value="" disabled>
-                      {loading ? "Loading availability..." : "Select next 5 non-weekend days..."}
-                    </option>
-                    {availability?.dates.map((entry) => (
-                      <option key={entry.date} value={entry.date}>
-                        {entry.display} ({entry.dayLabel})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                  </div>
-                </div>
+            <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50 overflow-y-auto custom-scrollbar">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-slate-100 mb-1 font-mono tracking-tight uppercase">Reserve Space</h2>
+                <p className="text-sm text-emerald-400 font-mono font-medium tracking-wide">[{resourceName}]</p>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-slate-500" />
-                  Reservation Duration
-                </label>
-                <p className="text-xs text-slate-500">
-                  Click a start slot, then click a later free slot on the same day to extend the reservation.
-                </p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 pl-1">Start Time</span>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Clock className={(!date ? "text-slate-700" : "text-slate-500") + " w-3.5 h-3.5"} />
+              <AnimatePresence mode="wait">
+                {isSuccess ? (
+                  <motion.div
+                    key="success"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center h-64 text-center"
+                  >
+                    <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-100 font-mono">RESERVATION_SUBMITTED</h3>
+                    <p className="text-sm text-slate-400 mt-2 font-sans italic">Your booking is saved and waiting for admin review.</p>
+                  </motion.div>
+                ) : (
+                  <motion.form
+                    key="form"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    onSubmit={handleSubmit}
+                    className="space-y-5"
+                  >
+                    {!isAuthenticated && (
+                      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+                        <div className="font-medium font-mono">AUTH_REQUIRED</div>
+                        <div className="mt-1 text-sky-100/80 text-xs">Login required to confirm reservations.</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            navigate("/login");
+                          }}
+                          className="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-mono font-medium text-sky-100 hover:bg-sky-400/20 cursor-pointer transition-colors"
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          GOTO_LOGIN
+                        </button>
                       </div>
-                      <select
+                    )}
+
+                    {error && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 font-mono text-xs overflow-hidden"
+                      >
+                        ERROR: {error}
+                      </motion.div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">
+                        <Calendar className="w-3 h-3" />
+                        Date_Select
+                      </label>
+                      <div className="relative">
+                        <select
+                          required
+                          disabled={loading || !availability}
+                          value={date}
+                          onChange={(event) => {
+                            setDate(event.target.value);
+                            setStartTime("");
+                            setEndTime("");
+                          }}
+                          className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm cursor-pointer"
+                        >
+                          <option value="" disabled>
+                            {loading ? "LOAD_AVAL..." : "SELECT_SESSION_DATE..."}
+                          </option>
+                          {availability?.dates.map((entry) => (
+                            <option key={entry.date} value={entry.date}>
+                              {entry.display} ({entry.dayLabel})
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                          <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">
+                        <Clock className="w-3 h-3" />
+                        Time_Range
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <select
+                            required
+                            disabled={!date}
+                            value={startTime}
+                            onChange={(event) => {
+                              setStartTime(event.target.value);
+                              setEndTime("");
+                            }}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none text-xs font-mono disabled:opacity-50 cursor-pointer"
+                          >
+                            <option value="" disabled>START_T</option>
+                            {availableStartTimes.map((time) => (
+                              <option key={time} value={time}>{time}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <span className="text-slate-600 font-mono">-</span>
+                        <div className="flex-1">
+                          <select
+                            required
+                            disabled={!startTime}
+                            value={endTime}
+                            onChange={(event) => setEndTime(event.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none text-xs font-mono disabled:opacity-50 cursor-pointer"
+                          >
+                            <option value="" disabled>END_T</option>
+                            {availableEndTimes.map((time) => (
+                              <option key={time} value={time}>{time}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">
+                        <UsersIcon className="w-3 h-3" />
+                        Cap_Count
+                        <span className="text-[10px] text-slate-600 font-normal ml-auto">MAX: {effectiveMaxCapacity}</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={effectiveMaxCapacity}
                         required
-                        disabled={!date}
-                        value={startTime}
+                        value={people}
                         onChange={(event) => {
-                          setStartTime(event.target.value);
-                          setEndTime("");
+                          const nextValue = Number.parseInt(event.target.value, 10);
+                          if (!Number.isNaN(nextValue) && nextValue > effectiveMaxCapacity) {
+                            setPeople(String(effectiveMaxCapacity));
+                          } else {
+                            setPeople(event.target.value);
+                          }
                         }}
-                        className="w-full pl-9 pr-8 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <option value="" disabled>--:--</option>
-                        {availableStartTimes.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <svg className={(!date ? "text-slate-700" : "text-slate-500") + " w-4 h-4"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-slate-500 font-medium pt-5">-</span>
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 pl-1">End Time</span>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Clock className={(!startTime ? "text-slate-700" : "text-slate-500") + " w-3.5 h-3.5"} />
-                      </div>
-                      <select
-                        required
-                        disabled={!startTime}
-                        value={endTime}
-                        onChange={(event) => setEndTime(event.target.value)}
-                        className="w-full pl-9 pr-8 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <option value="" disabled>--:--</option>
-                        {availableEndTimes.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <svg className={(!startTime ? "text-slate-700" : "text-slate-500") + " w-4 h-4"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                  <UsersIcon className="w-4 h-4 text-slate-500" />
-                  Number of People
-                  <span className="text-xs text-slate-500 font-normal ml-auto">Max capacity: {effectiveMaxCapacity}</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={effectiveMaxCapacity}
-                  required
-                  value={people}
-                  onChange={(event) => {
-                    const nextValue = Number.parseInt(event.target.value, 10);
-                    if (!Number.isNaN(nextValue) && nextValue > effectiveMaxCapacity) {
-                      setPeople(String(effectiveMaxCapacity));
-                    } else {
-                      setPeople(event.target.value);
-                    }
-                  }}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">Purpose</label>
-                <input
-                  type="text"
-                  value={purpose}
-                  onChange={(event) => setPurpose(event.target.value)}
-                  placeholder="Purpose of use"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-                />
-                <p className="text-xs text-slate-500">Purpose of use</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">Planned Items</label>
-                <textarea
-                  rows={4}
-                  value={plannedItemsInput}
-                  onChange={(event) => setPlannedItemsInput(event.target.value)}
-                  placeholder={"One item per line\nArduino series\nESP series\nBreadboard"}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
-                />
-                <p className="text-xs text-slate-500">
-                  Optional list of items or equipment the user plans to use.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">Project</label>
-                <textarea
-                  rows={3}
-                  value={projectNotes}
-                  onChange={(event) => setProjectNotes(event.target.value)}
-                  placeholder="Optional project name or project description"
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">When2meet</label>
-                <textarea
-                  rows={2}
-                  value={when2meet}
-                  onChange={(event) => setWhen2meet(event.target.value)}
-                  placeholder={"Optional scheduling reference\nor when2meet link"}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
-                />
-              </div>
-
-              <div className="pt-4">
-                <button
-                  type="submit"
-                  disabled={submitDisabled}
-                  className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]"
-                >
-                  {submitting ? "Saving Reservation..." : isAuthenticated ? "Confirm Reservation" : "Log In to Reserve"}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col min-h-[420px] md:min-h-0 md:h-[500px]">
-          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-            <h3 className="text-sm font-semibold tracking-wider text-slate-400 uppercase">Availability Overview</h3>
-            <div className="flex items-center gap-4 text-xs font-medium flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-slate-800 border border-slate-700"></div>
-                <span className="text-slate-500">Free</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-slate-950 border border-slate-700"></div>
-                <span className="text-slate-500">Closed</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-emerald-500/20 border border-emerald-500/50"></div>
-                <span className="text-emerald-400">Your Selection</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-rose-500/20 border border-rose-500/50"></div>
-                <span className="text-rose-400">Full</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto custom-scrollbar pr-2">
-            <div className="min-w-max">
-              <div className="flex">
-                <div className="w-16 shrink-0"></div>
-                {availability?.dates.map((day) => (
-                  <div key={day.date} className="w-20 flex flex-col items-center justify-center text-xs font-semibold text-slate-500 py-1">
-                    <span>{day.dayLabel}</span>
-                    <span className="text-[10px] text-slate-600 font-medium">{day.display}</span>
-                  </div>
-                ))}
-              </div>
-
-              {gridSlots.map((slotTime) => (
-                <div key={slotTime} className="flex group">
-                  <div className="w-16 shrink-0 text-right pr-4 py-1 text-[10px] font-medium text-slate-500 self-center group-hover:text-slate-300 transition-colors">
-                    {slotTime}
-                  </div>
-                  {availability?.dates.map((day) => {
-                    const slot = day.slots.find((entry) => entry.time === slotTime);
-                    if (!slot) {
-                      return <div key={day.date + "-" + slotTime} className="w-20 h-8 border border-slate-800/50 m-[1px] rounded-sm bg-slate-950/80" />;
-                    }
-
-                    const isSelected = date === day.date && startTime !== "" && endTime !== "" && slotTime >= startTime && slotTime < endTime;
-                    const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople;
-                    const title = !slot.isOpen
-                      ? "Closed"
-                      : slot.remainingCapacity < selectedPeople
-                        ? "Only " + slot.remainingCapacity + " spot(s) remaining"
-                        : slot.hasReservation
-                          ? String(slot.occupiedCount) + " in use, " + String(slot.remainingCapacity) + " remaining"
-                          : "Free";
-                    const classNames = [
-                      "w-20 h-8 border m-[1px] rounded-sm transition-colors text-left",
-                      !slot.isOpen ? "bg-slate-950 border-slate-800 cursor-not-allowed" : "",
-                      slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/20 cursor-not-allowed" : "",
-                      slot.isOpen && slot.remainingCapacity >= selectedPeople && !isSelected ? "bg-slate-900/40 hover:bg-slate-800 border-slate-800/50 cursor-pointer" : "",
-                      isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "",
-                    ].filter(Boolean).join(" ");
-
-                    return (
-                      <button
-                        key={day.date + "-" + slotTime}
-                        type="button"
-                        onClick={() => handleSlotClick(day, slot)}
-                        disabled={!isClickable}
-                        title={title}
-                        className={classNames}
+                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono text-sm"
                       />
-                    );
-                  })}
-                </div>
-              ))}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500">Session_Purpose</label>
+                      <input
+                        type="text"
+                        value={purpose}
+                        onChange={(event) => setPurpose(event.target.value)}
+                        placeholder="ENTER_PURPOSE"
+                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500">Planned_Items</label>
+                      <textarea
+                        rows={2}
+                        value={plannedItemsInput}
+                        onChange={(event) => setPlannedItemsInput(event.target.value)}
+                        placeholder={"ITEM_A\nITEM_B"}
+                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500">Project_Ref</label>
+                      <input
+                        type="text"
+                        value={projectNotes}
+                        onChange={(event) => setProjectNotes(event.target.value)}
+                        placeholder="PROJECT_IDENT"
+                        className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono text-sm"
+                      />
+                    </div>
+
+                    <div className="pt-2">
+                      <motion.button
+                        whileHover={submitDisabled ? {} : { scale: 1.01 }}
+                        whileTap={submitDisabled ? {} : { scale: 0.99 }}
+                        type="submit"
+                        disabled={submitDisabled}
+                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.1)] font-mono uppercase tracking-tighter cursor-pointer"
+                      >
+                        {submitting ? "COMMITTING..." : isAuthenticated ? "SUBMIT_RSVN" : "LOGIN_TO_ACT"}
+                      </motion.button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
+
+            <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col min-h-[420px]">
+              <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+                <h3 className="text-[10px] font-bold tracking-[0.2em] text-slate-600 uppercase font-mono">Terminal_Availability_Matrix</h3>
+                <div className="flex items-center gap-4 text-[9px] font-mono font-semibold flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-sm bg-slate-800 border border-slate-700"></div>
+                    <span className="text-slate-600">FREE</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-sm bg-slate-950 border border-slate-700"></div>
+                    <span className="text-slate-600">OFFLINE</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/50"></div>
+                    <span className="text-emerald-500">SELECTED</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-sm bg-rose-500/20 border border-rose-500/50"></div>
+                    <span className="text-rose-500">SATURATED</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto custom-scrollbar pr-2 border border-slate-800/50 rounded-lg p-2 bg-slate-900/10">
+                <div className="min-w-max">
+                  <div className="flex">
+                    <div className="w-16 shrink-0"></div>
+                    {availability?.dates.map((day) => (
+                      <div key={day.date} className="w-20 flex flex-col items-center justify-center text-[10px] font-mono font-bold text-slate-500 py-2 border-b border-slate-800">
+                        <span>{day.dayLabel}</span>
+                        <span className="text-[8px] text-slate-700">{day.display}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {gridSlots.map((slotTime) => (
+                    <div key={slotTime} className="flex group">
+                      <div className="w-16 shrink-0 text-right pr-4 py-1.5 text-[9px] font-mono font-medium text-slate-600 self-center group-hover:text-slate-400 transition-colors">
+                        {slotTime}
+                      </div>
+                      {availability?.dates.map((day) => {
+                        const slot = day.slots.find((entry) => entry.time === slotTime);
+                        if (!slot) {
+                          return <div key={day.date + "-" + slotTime} className="w-20 h-8 border border-slate-800/30 m-[0.5px] rounded-[1px] bg-slate-950/80" />;
+                        }
+
+                        const isSelected = date === day.date && startTime !== "" && endTime !== "" && slotTime >= startTime && slotTime < endTime;
+                        const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople;
+                        const title = !slot.isOpen
+                          ? "Offline"
+                          : slot.remainingCapacity < selectedPeople
+                            ? "Saturation: " + slot.remainingCapacity + " left"
+                            : slot.hasReservation
+                              ? String(slot.occupiedCount) + " ACTIVE, " + String(slot.remainingCapacity) + " FREE"
+                              : "READY";
+                        
+                        return (
+                          <motion.button
+                            key={day.date + "-" + slotTime}
+                            type="button"
+                            whileHover={isClickable ? { backgroundColor: isSelected ? "rgba(16, 185, 129, 0.4)" : "rgba(30, 41, 59, 0.8)" } : {}}
+                            onClick={() => handleSlotClick(day, slot)}
+                            disabled={!isClickable}
+                            title={title}
+                            className={`w-20 h-8 border m-[0.5px] rounded-[1px] transition-all duration-150 ${
+                              !slot.isOpen ? "bg-slate-950 border-slate-800/50 cursor-not-allowed" :
+                              slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/30 cursor-not-allowed" :
+                              isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[inset_0_0_10px_rgba(16,185,129,0.2)] z-1" :
+                              "bg-slate-900/40 border-slate-800/50 cursor-pointer"
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

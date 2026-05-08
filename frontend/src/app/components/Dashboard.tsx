@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { ReservationModal } from "./ReservationModal";
 import { useAuth } from "../auth";
 
@@ -264,28 +265,66 @@ const getAreaDetails = (item: AreaStatusItem) => {
   return `${item.usedCount}/${item.area.maxCapacity} capacity currently reserved`;
 };
 
-function AreaCard({ item, onReserve }: { item: AreaStatusItem; onReserve: (area: AreaSummary) => void }) {
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.1,
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  }),
+};
+
+function AreaCard({
+  item,
+  onReserve,
+  index,
+}: {
+  item: AreaStatusItem;
+  onReserve: (area: AreaSummary) => void;
+  index: number;
+}) {
   const status = getAreaStatusKind(item);
   const { icon: Icon, eyebrow } = getAreaMeta(item.area.type);
+  const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div className={`relative p-5 rounded-xl border flex flex-col transition-all duration-300 ${getStatusColor(status)} group`}>
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 rounded-lg bg-slate-900/50 border border-slate-700 shrink-0">
-            <Icon className="w-5 h-5" />
+    <motion.div
+      custom={index}
+      initial={shouldReduceMotion ? { opacity: 1, y: 0 } : "hidden"}
+      animate="visible"
+      variants={cardVariants}
+      whileHover={shouldReduceMotion ? {} : { y: -4, transition: { duration: 0.2 } }}
+      className={`relative p-5 rounded-xl border flex flex-col transition-all duration-300 ${getStatusColor(
+        status,
+      )} group cursor-default h-full`}
+    >
+      <div className="flex flex-col gap-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-md bg-slate-900/50 border border-slate-700 shrink-0">
+              <Icon className="w-3.5 h-3.5" />
+            </div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-mono leading-none truncate">
+              {eyebrow}
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-1">{eyebrow}</p>
-            <h3 className="font-semibold text-slate-100 truncate">{item.area.name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{getAreaDetails(item)}</p>
+          <div className="flex items-center gap-1.5 shrink-0 bg-slate-950/40 px-2 py-1 rounded-sm border border-slate-800/50">
+            <div className={`w-1.5 h-1.5 rounded-full ${getStatusGlow(status)} ${shouldReduceMotion ? "" : "animate-pulse"}`} />
+            <span className="text-[9px] font-bold uppercase tracking-tight opacity-70 whitespace-nowrap font-mono">
+              {getStatusLabel(status)}
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-medium uppercase tracking-wider opacity-80 whitespace-nowrap">
-            {getStatusLabel(status)}
-          </span>
-          <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusGlow(status)}`} />
+
+        <div className="min-w-0">
+          <h3 className="font-bold text-slate-100 font-mono tracking-tight text-lg leading-tight">
+            {item.area.name}
+          </h3>
+          <p className="text-[11px] text-slate-400 mt-1 font-mono opacity-80">{getAreaDetails(item)}</p>
         </div>
       </div>
 
@@ -293,19 +332,19 @@ function AreaCard({ item, onReserve }: { item: AreaStatusItem; onReserve: (area:
 
       <div className="grid grid-cols-2 gap-3 text-xs text-slate-300 mb-4">
         <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1">In Use</div>
-          <div className="text-base font-semibold text-slate-100">
+          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1 font-mono">In Use</div>
+          <div className="text-base font-semibold text-slate-100 font-mono">
             {item.usedCount}/{item.area.maxCapacity}
           </div>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1">Remaining</div>
-          <div className="text-base font-semibold text-slate-100">{item.remainingCapacity}</div>
+          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1 font-mono">Remaining</div>
+          <div className="text-base font-semibold text-slate-100 font-mono">{item.remainingCapacity}</div>
         </div>
       </div>
 
       <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-700/50 gap-3">
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-slate-400 italic">
           {item.area.showPrintingStatus
             ? item.hasActivePrinting
               ? "Printer is active"
@@ -317,13 +356,13 @@ function AreaCard({ item, onReserve }: { item: AreaStatusItem; onReserve: (area:
         <button
           onClick={() => onReserve(item.area)}
           disabled={!item.area.isActive}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 transition-all text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 transition-all text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           Reserve
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -342,6 +381,7 @@ export function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [refreshNonce, setRefreshNonce] = useState(0);
   const isAdmin = user?.role === "admin";
+  const shouldReduceMotion = useReducedMotion();
 
   const enrichedReservations = useMemo(() => {
     const now = new Date();
@@ -385,7 +425,7 @@ export function Dashboard() {
             new Intl.DateTimeFormat("en-US", {
               hour: "2-digit",
               minute: "2-digit",
-            }).format(new Date())
+            }).format(new Date()),
           );
         }
       } catch (loadError) {
@@ -454,8 +494,7 @@ export function Dashboard() {
         }
       } catch (loadError) {
         if (!cancelled) {
-          const message =
-            loadError instanceof Error ? loadError.message : "Failed to load your reservations";
+          const message = loadError instanceof Error ? loadError.message : "Failed to load your reservations";
           setReservationsError(message);
         }
       } finally {
@@ -498,9 +537,7 @@ export function Dashboard() {
 
       setRefreshNonce((current) => current + 1);
     } catch (actionError) {
-      setReservationActionError(
-        actionError instanceof Error ? actionError.message : "Failed to cancel reservation"
-      );
+      setReservationActionError(actionError instanceof Error ? actionError.message : "Failed to cancel reservation");
     } finally {
       setActingReservationId(null);
     }
@@ -508,38 +545,52 @@ export function Dashboard() {
 
   return (
     <>
-      <div className="flex flex-col gap-4 mb-6">
+      <motion.div
+        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col gap-4 mb-6"
+      >
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-100">Area Status</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Live availability is now driven by the backend reservation data.
+            <h1 className="text-2xl font-semibold text-slate-100 font-mono tracking-tight">Area Status</h1>
+            <p className="text-sm text-slate-400 mt-1 font-sans">
+              Live availability driven by terminal reservation data.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>{lastUpdated ? `Updated ${lastUpdated}` : "Fetching latest status..."}</span>
+            <span>{lastUpdated ? `LAST_SYNC: ${lastUpdated}` : "WAITING_FOR_DATA..."}</span>
           </div>
         </div>
 
-        {error ? (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-3">
-            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-            <div>
-              <div className="font-medium">Could not load live area status</div>
-              <div className="text-amber-100/80 mt-1">{error}</div>
-            </div>
-          </div>
-        ) : null}
-      </div>
+        <AnimatePresence>
+          {error ? (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-3 overflow-hidden"
+            >
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div>
+                <div className="font-medium font-mono uppercase tracking-wider text-xs">Error: Sync Failure</div>
+                <div className="text-amber-100/80 mt-1 text-xs">{error}</div>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </motion.div>
 
-      <div className="mb-8 rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-800">
+      <motion.div
+        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="mb-8 rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden backdrop-blur-sm"
+      >
+        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-800 bg-slate-900/20">
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">My Reservations</h2>
-            <p className="text-sm text-slate-400 mt-1">
-              Track your upcoming, active, and completed bookings.
-            </p>
+            <h2 className="text-lg font-semibold text-slate-100 font-mono">My Reservations</h2>
+            <p className="text-sm text-slate-400 mt-1 font-sans">Track your terminal session bookings.</p>
           </div>
           <CalendarClock className="w-5 h-5 text-slate-500 shrink-0" />
         </div>
@@ -547,96 +598,108 @@ export function Dashboard() {
         {!isAuthenticated ? (
           <div className="px-5 py-6 text-sm text-slate-400">
             <span>Log in to view your reservation status. </span>
-            <Link to="/login" className="text-emerald-400 hover:text-emerald-300 font-medium">
-              Go to login
+            <Link to="/login" className="text-emerald-400 hover:text-emerald-300 font-medium font-mono">
+              AUTH_LOGIN
             </Link>
           </div>
         ) : loadingReservations ? (
-          <div className="px-5 py-6 text-sm text-slate-400">Loading your reservations...</div>
+          <div className="px-5 py-6 text-sm text-slate-400 font-mono animate-pulse">READING_RESERVATIONS...</div>
         ) : reservationsError ? (
-          <div className="px-5 py-6 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20">
+          <div className="px-5 py-6 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20 font-mono">
             {reservationsError}
           </div>
         ) : enrichedReservations.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-slate-400">
-            You do not have any reservations yet.
-          </div>
+          <div className="px-5 py-6 text-sm text-slate-400 font-mono italic">NO_ACTIVE_RESERVATIONS_FOUND</div>
         ) : (
           <div className="divide-y divide-slate-800">
-            {enrichedReservations.map((reservation) => (
-              <div
-                key={reservation.id}
-                className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h3 className="text-sm font-semibold text-slate-100">{reservation.area.name}</h3>
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${getReservationStatusClassName(
-                        reservation.derivedStatus
-                      )}`}
+            <AnimatePresence mode="popLayout">
+              {enrichedReservations.map((reservation, i) => (
+                <motion.div
+                  key={reservation.id}
+                  initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 hover:bg-slate-800/20 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-sm font-semibold text-slate-100 font-mono tracking-tight">
+                        {reservation.area.name}
+                      </h3>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-mono font-medium tracking-tighter uppercase ${getReservationStatusClassName(
+                          reservation.derivedStatus,
+                        )}`}
+                      >
+                        {reservation.derivedStatus}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-400 mt-1 font-mono text-[13px]">
+                      {formatReservationDate(reservation.startTime)} - {formatReservationDate(reservation.endTime)}
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                      <p className="text-xs text-slate-500">
+                        <Users className="w-3 h-3 inline mr-1 opacity-50" />
+                        {reservation.participantCount} pax
+                      </p>
+                      {reservation.purpose && <p className="text-xs text-slate-500 italic">"{reservation.purpose}"</p>}
+                    </div>
+                    {reservation.plannedItems.length > 0 && (
+                      <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                        <span className="text-[10px] font-mono uppercase opacity-50">Tools:</span>
+                        {formatPlannedItems(reservation.plannedItems)}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-600 mt-1 font-mono text-[10px]">{reservation.cancelHint}</p>
+                  </div>
+                  <div className="flex flex-col items-start lg:items-end gap-2 shrink-0">
+                    <div className="text-[10px] text-slate-600 font-mono">ID: {reservation.id.slice(-8)}</div>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelReservation(reservation.id)}
+                      disabled={!reservation.canCancel || actingReservationId === reservation.id}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[11px] font-mono font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      title={reservation.cancelHint}
                     >
-                      {reservation.derivedStatus}
-                    </span>
+                      <XCircle className="w-3.5 h-3.5" />
+                      {actingReservationId === reservation.id ? "CANCEL_PENDING..." : "CANCEL_RSVN"}
+                    </button>
                   </div>
-                  <p className="text-sm text-slate-400 mt-1">
-                    {formatReservationDate(reservation.startTime)} - {formatReservationDate(reservation.endTime)}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {reservation.participantCount} participant(s)
-                    {reservation.purpose ? ` · ${reservation.purpose}` : ""}
-                  </p>
-                  {reservation.plannedItems.length > 0 ? (
-                    <p className="text-xs text-slate-500 mt-1">
-                      Items: {formatPlannedItems(reservation.plannedItems)}
-                    </p>
-                  ) : null}
-                  {reservation.project ? (
-                    <p className="text-xs text-slate-500 mt-1">
-                      Notes: {reservation.project}
-                    </p>
-                  ) : null}
-                  {reservation.when2meet ? (
-                    <p className="text-xs text-slate-500 mt-1 break-all">
-                      When2meet: {reservation.when2meet}
-                    </p>
-                  ) : null}
-                  <p className="text-xs text-slate-500 mt-1">{reservation.cancelHint}</p>
-                </div>
-                <div className="flex flex-col items-start lg:items-end gap-2 shrink-0">
-                  <div className="text-xs text-slate-500">
-                    Reservation ID: {reservation.id.slice(-8)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCancelReservation(reservation.id)}
-                    disabled={!reservation.canCancel || actingReservationId === reservation.id}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={reservation.cancelHint}
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    {actingReservationId === reservation.id ? "Cancelling..." : "Cancel Reservation"}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {reservationActionError ? (
-              <div className="px-5 py-4 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20">
-                {reservationActionError}
-              </div>
-            ) : null}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            <AnimatePresence>
+              {reservationActionError ? (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="px-5 py-4 text-xs text-amber-200 bg-amber-500/10 border-t border-amber-500/20 font-mono overflow-hidden"
+                >
+                  ERROR: {reservationActionError}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
         )}
-      </div>
+      </motion.div>
 
       {loading ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-5 py-8 text-sm text-slate-400">
-          Loading current area status...
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-64 rounded-xl border border-slate-800 bg-slate-900/40 animate-pulse flex items-center justify-center"
+            >
+              <RefreshCw className="w-6 h-6 text-slate-700 animate-spin" />
+            </div>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {areas.map((item) => (
-            <AreaCard key={item.area.id} item={item} onReserve={handleReserve} />
+          {areas.map((item, index) => (
+            <AreaCard key={item.area.id} item={item} onReserve={handleReserve} index={index} />
           ))}
         </div>
       )}
