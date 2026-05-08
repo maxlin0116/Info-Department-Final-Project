@@ -1,129 +1,323 @@
-const Reservation = require('../models/reservation.model');
-const Area = require('../models/area.model');
+const Reservation = require("../models/reservation.model");
+const Area = require("../models/area.model");
 
 const VALID_TIME_BLOCKS = [
-    { start: 10 * 60, end: 12 * 60 },                 // Morning: 10:00 - 12:00
-    { start: 13 * 60 + 20, end: 15 * 60 + 10 },       // Afternoon A: 13:20 - 15:10
-    { start: 15 * 60 + 30, end: 17 * 60 + 20 },       // Afternoon B: 15:30 - 17:20
-    { start: 18 * 60, end: 22 * 60 }                  // Evening A+B: 18:00 - 22:00 (Continuous)
+  { start: 10 * 60, end: 12 * 60 },
+  { start: 13 * 60 + 20, end: 15 * 60 + 10 },
+  { start: 15 * 60 + 30, end: 17 * 60 + 20 },
+  { start: 18 * 60, end: 22 * 60 },
 ];
 
-function isWithinOpeningHours(startString, endString) {
-    const start = new Date(startString);
-    const end = new Date(endString);
+const ACTIVE_STATUSES = ["approved", "pending"];
 
-    if (end <= start) return false;
+function createError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
 
-    const dayOfWeek = start.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-        return false;
-    }
+function normalizeDate(value, fieldName) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw createError(400, "Invalid " + fieldName + ". Please provide a valid date/time.");
+  }
 
-    if (start.toDateString() !== end.toDateString()) {
-        return false;
-    }
+  return date;
+}
 
-    const startMins = start.getHours() * 60 + start.getMinutes();
-    const endMins = end.getHours() * 60 + end.getMinutes();
+function isWithinOpeningHours(startTime, endTime) {
+  if (endTime <= startTime) {
+    return false;
+  }
 
-    return VALID_TIME_BLOCKS.some(block => 
-        startMins >= block.start && endMins <= block.end
-    );
+  if (startTime.getDay() === 0 || startTime.getDay() === 6) {
+    return false;
+  }
+
+  if (startTime.toDateString() !== endTime.toDateString()) {
+    return false;
+  }
+
+  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+  const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
+
+  return VALID_TIME_BLOCKS.some((block) => startMinutes >= block.start && endMinutes <= block.end);
+}
+
+function serializeArea(area) {
+  if (!area) {
+    return null;
+  }
+
+  return {
+    id: String(area._id ?? area.id),
+    name: area.name,
+    type: area.type,
+    maxCapacity: area.maxCapacity,
+    description: area.description,
+    showPrintingStatus: area.showPrintingStatus,
+    isActive: area.isActive,
+  };
+}
+
+function serializeUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: String(user._id ?? user.id),
+    name: user.name,
+    grade: user.grade,
+    studentId: user.studentId,
+    personalEmail: user.personalEmail,
+    role: user.role,
+  };
+}
+
+function serializeReservation(reservation) {
+  const source = typeof reservation.toObject === "function" ? reservation.toObject() : reservation;
+
+  return {
+    id: String(source._id ?? source.id),
+    user:
+      source.user && typeof source.user === "object" && source.user !== null && !Array.isArray(source.user)
+        ? serializeUser(source.user)
+        : String(source.user),
+    area:
+      source.area && typeof source.area === "object" && source.area !== null && !Array.isArray(source.area)
+        ? serializeArea(source.area)
+        : String(source.area),
+    purpose: source.purpose,
+    plannedItems: Array.isArray(source.plannedItems) ? source.plannedItems : [],
+    participantCount: source.participantCount,
+    when2meet: source.when2meet ?? "",
+    project: source.project ?? "",
+    startTime: source.startTime,
+    endTime: source.endTime,
+    status: source.status,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  };
+}
+
+async function getOverlappingParticipantCount(areaId, startTime, endTime, excludeReservationId) {
+  const query = {
+    area: areaId,
+    status: { $in: ACTIVE_STATUSES },
+    startTime: { $lt: endTime },
+    endTime: { $gt: startTime },
+  };
+
+  if (excludeReservationId) {
+    query._id = { $ne: excludeReservationId };
+  }
+
+  const overlappingReservations = await Reservation.find(query).select("participantCount").lean();
+
+  return overlappingReservations.reduce((total, reservation) => total + reservation.participantCount, 0);
+}
+
+async function validateReservationWindow(area, startTime, endTime, participantCount, excludeReservationId) {
+  if (!area) {
+    throw createError(404, "Requested reservation area not found");
+  }
+
+  if (!area.isActive) {
+    throw createError(400, "This area is currently unavailable for reservations");
+  }
+
+  if (!Number.isInteger(participantCount) || participantCount < 1) {
+    throw createError(400, "Participant count must be at least 1");
+  }
+
+  if (participantCount > area.maxCapacity) {
+    throw createError(400, "This area can only host up to " + area.maxCapacity + " participant(s).");
+  }
+
+  if (!isWithinOpeningHours(startTime, endTime)) {
+    throw createError(400, "Reservation failed. The requested time falls outside opening hours, during a break, or on a weekend.");
+  }
+
+  const currentUsedCount = await getOverlappingParticipantCount(area._id, startTime, endTime, excludeReservationId);
+  const remainingCapacity = area.maxCapacity - currentUsedCount;
+
+  if (currentUsedCount + participantCount > area.maxCapacity) {
+    throw createError(409, "Reservation failed. Only " + Math.max(remainingCapacity, 0) + " spot(s) remain available during this time slot.");
+  }
 }
 
 exports.getAllReservations = async () => {
-    return await Reservation.findAll();
+  const reservations = await Reservation.find()
+    .populate("user")
+    .populate("area")
+    .sort({ startTime: 1 })
+    .lean();
+
+  return reservations.map(serializeReservation);
 };
 
 exports.getCurrentReservations = async (currentTime) => {
-    return await Reservation.findCurrent(currentTime);
+  const reservations = await Reservation.find({
+    status: { $in: ACTIVE_STATUSES },
+    startTime: { $lte: currentTime },
+    endTime: { $gte: currentTime },
+  })
+    .populate("user")
+    .populate("area")
+    .sort({ startTime: 1 })
+    .lean();
+
+  return reservations.map(serializeReservation);
 };
 
 exports.getUserReservations = async (userId) => {
-    return await Reservation.findByUserId(userId);
+  const reservations = await Reservation.find({ user: userId })
+    .populate("user")
+    .populate("area")
+    .sort({ startTime: -1 })
+    .lean();
+
+  return reservations.map(serializeReservation);
 };
 
 exports.createReservation = async (user, data) => {
-    const { areaId, startTime, endTime, participantCount, purpose, plannedItems, requiredItems, when2meet } = data;
-    const area = await Area.findById(areaId);
-    if (!area) throw new Error('Requested reservation area not found');
+  const areaId = data.areaId;
+  const startTime = normalizeDate(data.startTime, "startTime");
+  const endTime = normalizeDate(data.endTime, "endTime");
+  const participantCount = Number.parseInt(String(data.participantCount), 10);
+  const purpose = typeof data.purpose === "string" && data.purpose.trim() ? data.purpose.trim() : "General MakerSpace use";
+  const plannedItems = Array.isArray(data.plannedItems) ? data.plannedItems : [];
+  const when2meet = typeof data.when2meet === "string" ? data.when2meet.trim() : "";
+  const project = typeof data.project === "string" ? data.project.trim() : "";
 
-    if (!isWithinOpeningHours(startTime, endTime)) {
-        throw new Error('Reservation failed! The requested time falls outside opening hours, during a break, or on a weekend.');
-    }
+  if (!areaId) {
+    throw createError(400, "Please select an area to reserve");
+  }
 
-    const currentUsedCount = await Reservation.countParticipantsInRange(areaId, startTime, endTime);
-    const nextCount = currentUsedCount + participantCount;
+  const area = await Area.findById(areaId);
+  await validateReservationWindow(area, startTime, endTime, participantCount, null);
 
-    if (nextCount > area.max_capacity) {
-        throw new Error(`Reservation failed! Only ${area.max_capacity - currentUsedCount} spots remain available during this time slot.`);
-    }
+  const reservation = await Reservation.create({
+    user: user.id,
+    area: area._id,
+    purpose,
+    plannedItems,
+    participantCount,
+    when2meet,
+    project,
+    startTime,
+    endTime,
+    status: "approved",
+  });
 
-    const newReservation = await Reservation.create({
-        user_id: user.id,
-        area_id: areaId,
-        purpose,
-        planned_items: JSON.stringify(plannedItems),
-        required_items: requiredItems,
-        participant_count: participantCount,
-        when2meet,
-        start_time: startTime,
-        end_time: endTime,
-        status: 'approved' // Defaulting to approved for MVP
-    });
+  await reservation.populate("user");
+  await reservation.populate("area");
 
-    return newReservation;
+  return serializeReservation(reservation);
 };
 
 exports.updateReservation = async (user, reservationId, updateData) => {
-    const reservation = await Reservation.findById(reservationId);
-    if (!reservation) throw new Error('Reservation not found');
+  const reservation = await Reservation.findById(reservationId).populate("area");
+  if (!reservation) {
+    throw createError(404, "Reservation not found");
+  }
 
-    if (reservation.user_id !== user.id && user.role !== 'admin') {
-        throw new Error('You can only modify your own reservations');
-    }
-    
-    // If updating time, check opening hours again
-    if (updateData.startTime || updateData.endTime) {
-        const newStart = updateData.startTime || reservation.start_time;
-        const newEnd = updateData.endTime || reservation.end_time;
-        if (!isWithinOpeningHours(newStart, newEnd)) {
-            throw new Error('Update failed! The new time falls outside opening hours, during a break, or on a weekend.');
-        }
-    }
+  if (String(reservation.user) !== user.id && user.role !== "admin") {
+    throw createError(403, "You can only modify your own reservations");
+  }
 
-    const timeDiff = new Date(reservation.start_time) - new Date();
-    const hoursDiff = timeDiff / (1000 * 60 * 60);
+  if (updateData.areaId && String(reservation.area._id) !== String(updateData.areaId)) {
+    throw createError(400, "Changing the reserved area is not supported");
+  }
 
-    if (hoursDiff < 6 && user.role !== 'admin') {
-        throw new Error('Cannot modify reservations that start in less than 6 hours');
-    }
+  const timeDiff = reservation.startTime.getTime() - Date.now();
+  const hoursDiff = timeDiff / (1000 * 60 * 60);
+  if (hoursDiff < 6 && user.role !== "admin") {
+    throw createError(400, "Cannot modify reservations that start in less than 6 hours");
+  }
 
-    return await Reservation.update(reservationId, updateData);
+  const nextStartTime = updateData.startTime ? normalizeDate(updateData.startTime, "startTime") : reservation.startTime;
+  const nextEndTime = updateData.endTime ? normalizeDate(updateData.endTime, "endTime") : reservation.endTime;
+  const nextParticipantCount = updateData.participantCount !== undefined
+    ? Number.parseInt(String(updateData.participantCount), 10)
+    : reservation.participantCount;
+
+  await validateReservationWindow(reservation.area, nextStartTime, nextEndTime, nextParticipantCount, reservation._id);
+
+  reservation.startTime = nextStartTime;
+  reservation.endTime = nextEndTime;
+  reservation.participantCount = nextParticipantCount;
+  reservation.purpose = typeof updateData.purpose === "string" && updateData.purpose.trim()
+    ? updateData.purpose.trim()
+    : reservation.purpose;
+  reservation.plannedItems = Array.isArray(updateData.plannedItems)
+    ? updateData.plannedItems
+    : reservation.plannedItems;
+  reservation.when2meet = typeof updateData.when2meet === "string"
+    ? updateData.when2meet.trim()
+    : reservation.when2meet;
+  reservation.project = typeof updateData.project === "string"
+    ? updateData.project.trim()
+    : reservation.project;
+
+  await reservation.save();
+  await reservation.populate("user");
+  await reservation.populate("area");
+
+  return serializeReservation(reservation);
 };
 
 exports.cancelReservation = async (user, reservationId, currentTime) => {
-    const reservation = await Reservation.findById(reservationId);
-    if (!reservation) throw new Error('Reservation not found');
+  const reservation = await Reservation.findById(reservationId);
+  if (!reservation) {
+    throw createError(404, "Reservation not found");
+  }
 
-    if (reservation.user_id !== user.id && user.role !== 'admin') {
-        throw new Error('You can only cancel your own reservations');
-    }
+  if (String(reservation.user) !== user.id && user.role !== "admin") {
+    throw createError(403, "You can only cancel your own reservations");
+  }
 
-    const timeDiff = new Date(reservation.start_time) - new Date(currentTime);
-    const hoursDiff = timeDiff / (1000 * 60 * 60);
+  const timeDiff = reservation.startTime.getTime() - currentTime.getTime();
+  const hoursDiff = timeDiff / (1000 * 60 * 60);
+  if (hoursDiff < 6 && user.role !== "admin") {
+    throw createError(400, "Cannot cancel reservations that start in less than 6 hours");
+  }
 
-    if (hoursDiff < 6 && user.role !== 'admin') {
-        throw new Error('Cannot cancel reservations that start in less than 6 hours');
-    }
+  reservation.status = "cancelled";
+  await reservation.save();
 
-    return await Reservation.delete(reservationId);
+  return serializeReservation(reservation);
 };
 
 exports.approveReservation = async (reservationId) => {
-    return await Reservation.updateStatus(reservationId, 'approved');
+  const reservation = await Reservation.findByIdAndUpdate(
+    reservationId,
+    { status: "approved" },
+    { new: true }
+  )
+    .populate("user")
+    .populate("area");
+
+  if (!reservation) {
+    throw createError(404, "Reservation not found");
+  }
+
+  return serializeReservation(reservation);
 };
 
 exports.rejectReservation = async (reservationId) => {
-    return await Reservation.updateStatus(reservationId, 'rejected');
+  const reservation = await Reservation.findByIdAndUpdate(
+    reservationId,
+    { status: "rejected" },
+    { new: true }
+  )
+    .populate("user")
+    .populate("area");
+
+  if (!reservation) {
+    throw createError(404, "Reservation not found");
+  }
+
+  return serializeReservation(reservation);
 };

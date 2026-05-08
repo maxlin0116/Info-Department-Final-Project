@@ -1,61 +1,227 @@
-const Area = require('../models/area.model');
-const Reservation = require('../models/reservation.model');
+const Area = require("../models/area.model");
+const Reservation = require("../models/reservation.model");
+const OpeningHour = require("../models/openingHour.model");
+
+const GRID_START_MINUTES = 10 * 60;
+const GRID_END_MINUTES = 21 * 60 + 30;
+const SLOT_SIZE_MINUTES = 30;
+const DEFAULT_AVAILABILITY_DAYS = 5;
+const MAX_AVAILABILITY_DAYS = 10;
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function toAreaPayload(area) {
+  return {
+    id: String(area._id),
+    name: area.name,
+    type: area.type,
+    maxCapacity: area.maxCapacity,
+    description: area.description,
+    showPrintingStatus: area.showPrintingStatus,
+    isActive: area.isActive,
+  };
+}
+
+function timeToMinutes(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDisplayDate(date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function startOfDay(date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function endOfDay(date) {
+  const value = new Date(date);
+  value.setHours(23, 59, 59, 999);
+  return value;
+}
+
+function setTimeOnDate(date, minutes) {
+  const value = new Date(date);
+  value.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return value;
+}
+
+function normalizeAvailabilityStartDate(input) {
+  if (!input) {
+    return startOfDay(new Date());
+  }
+
+  const parsed = new Date(`${input}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return startOfDay(new Date());
+  }
+
+  return startOfDay(parsed);
+}
+
+function getNextWeekdays(startDate, count) {
+  const dates = [];
+  const cursor = startOfDay(startDate);
+
+  while (dates.length < count) {
+    const dayOfWeek = cursor.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      dates.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates;
+}
+
+function generateGridTimes() {
+  const slots = [];
+  for (let minutes = GRID_START_MINUTES; minutes <= GRID_END_MINUTES; minutes += SLOT_SIZE_MINUTES) {
+    slots.push(minutesToTime(minutes));
+  }
+  return slots;
+}
+
+function isSlotOpenForMinutes(openingHours, slotMinutes) {
+  return openingHours.some((entry) => {
+    const openMinutes = timeToMinutes(entry.openTime);
+    const closeMinutes = timeToMinutes(entry.closeTime);
+    return slotMinutes >= openMinutes && slotMinutes < closeMinutes;
+  });
+}
+
+function overlaps(startA, endA, startB, endB) {
+  return startA < endB && endA > startB;
+}
+
+async function buildAreaStatus(area, currentTime) {
+  const currentReservations = await Reservation.find({
+    area: area._id,
+    status: "approved",
+    startTime: { $lte: currentTime },
+    endTime: { $gt: currentTime },
+  }).lean();
+
+  const usedCount = currentReservations.reduce(
+    (sum, reservation) => sum + (reservation.participantCount || 0),
+    0
+  );
+
+  return {
+    area: toAreaPayload(area),
+    usedCount,
+    remainingCapacity: Math.max(area.maxCapacity - usedCount, 0),
+    activeReservationCount: currentReservations.length,
+    isFull: usedCount >= area.maxCapacity,
+    hasActivePrinting: area.type === "3dp" && currentReservations.length > 0,
+  };
+}
 
 exports.getAllAreasInfo = async () => {
-    return await Area.findAll();
+  return await Area.find().sort({ createdAt: 1 }).lean();
 };
 
 exports.getAreaStatus = async (currentTime) => {
-    const areas = await Area.findAll();
-    const statuses = await Promise.all(
-        areas.map(async (area) => {
-            const currentReservations = await Reservation.findCurrentByArea(area.id, currentTime);
-
-            const usedCount = currentReservations.reduce(
-                (sum, res) => sum + res.participant_count, 
-                0
-            );
-
-            return {
-                area: {
-                    id: area.id,
-                    name: area.name,
-                    type: area.type,
-                    maxCapacity: area.max_capacity
-                },
-                usedCount,
-                isFull: usedCount >= area.max_capacity,
-                hasActivePrinting: area.type === '3dp' && currentReservations.length > 0
-            };
-        })
-    );
-
-    return statuses;
+  const areas = await Area.find().sort({ createdAt: 1 }).lean();
+  return await Promise.all(areas.map((area) => buildAreaStatus(area, currentTime)));
 };
 
 exports.getSingleAreaStatus = async (areaId, currentTime) => {
-    const area = await Area.findById(areaId);
-    
-    if (!area) {
-        return null; 
+  const area = await Area.findById(areaId).lean();
+
+  if (!area) {
+    return null;
+  }
+
+  return await buildAreaStatus(area, currentTime);
+};
+
+exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
+  const area = await Area.findById(areaId).lean();
+  if (!area) {
+    return null;
+  }
+
+  const requestedDays = Number.parseInt(days, 10);
+  const totalDays = Number.isFinite(requestedDays)
+    ? Math.min(Math.max(requestedDays, 1), MAX_AVAILABILITY_DAYS)
+    : DEFAULT_AVAILABILITY_DAYS;
+
+  const firstDate = normalizeAvailabilityStartDate(startDate);
+  const dates = getNextWeekdays(firstDate, totalDays);
+  const dayNumbers = [...new Set(dates.map((date) => date.getDay()))];
+
+  const [openingHours, reservations] = await Promise.all([
+    OpeningHour.find({ dayOfWeek: { $in: dayNumbers }, isOpen: true }).lean(),
+    Reservation.find({
+      area: area._id,
+      status: "approved",
+      startTime: { $lt: endOfDay(dates[dates.length - 1]) },
+      endTime: { $gt: startOfDay(dates[0]) },
+    })
+      .select("startTime endTime participantCount")
+      .lean(),
+  ]);
+
+  const openingHoursByDay = new Map();
+  for (const entry of openingHours) {
+    if (!openingHoursByDay.has(entry.dayOfWeek)) {
+      openingHoursByDay.set(entry.dayOfWeek, []);
     }
+    openingHoursByDay.get(entry.dayOfWeek).push(entry);
+  }
 
-    const currentReservations = await Reservation.findCurrentByArea(areaId, currentTime);
+  const gridTimes = generateGridTimes();
 
-    const usedCount = currentReservations.reduce(
-        (sum, res) => sum + res.participant_count, 
-        0
-    );
+  return {
+    area: toAreaPayload(area),
+    dates: dates.map((date) => {
+      const dayOfWeek = date.getDay();
+      const dayOpeningHours = openingHoursByDay.get(dayOfWeek) || [];
 
-    return {
-        area: {
-            id: area.id,
-            name: area.name,
-            type: area.type,
-            maxCapacity: area.max_capacity
-        },
-        usedCount,
-        isFull: usedCount >= area.max_capacity,
-        hasActivePrinting: area.type === '3dp' && currentReservations.length > 0
-    };
+      return {
+        date: formatDate(date),
+        dayLabel: DAY_LABELS[dayOfWeek],
+        display: formatDisplayDate(date),
+        slots: gridTimes.map((time) => {
+          const slotMinutes = timeToMinutes(time);
+          const slotStart = setTimeOnDate(date, slotMinutes);
+          const slotEnd = new Date(slotStart.getTime() + SLOT_SIZE_MINUTES * 60 * 1000);
+          const isOpen = area.isActive && isSlotOpenForMinutes(dayOpeningHours, slotMinutes);
+
+          const occupiedCount = reservations.reduce((sum, reservation) => {
+            return overlaps(slotStart, slotEnd, new Date(reservation.startTime), new Date(reservation.endTime))
+              ? sum + (reservation.participantCount || 0)
+              : sum;
+          }, 0);
+
+          const remainingCapacity = Math.max(area.maxCapacity - occupiedCount, 0);
+
+          return {
+            time,
+            isOpen,
+            occupiedCount,
+            remainingCapacity,
+            isFull: isOpen && remainingCapacity === 0,
+            hasReservation: occupiedCount > 0,
+          };
+        }),
+      };
+    }),
+  };
 };

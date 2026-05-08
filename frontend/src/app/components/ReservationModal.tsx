@@ -1,163 +1,315 @@
-import { useState, useEffect, useMemo } from "react";
-import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, LogIn } from "lucide-react";
+import { useAuth } from "../auth";
 
 interface ReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  areaId: string | null;
   resourceName: string;
+  maxCapacity: number;
+  onReservationCreated?: () => void;
 }
 
-// Generate an array of time strings at 30-min intervals
-const generateTimes = (startHour: number, startMin: number, endHour: number, endMin: number) => {
-  const times = [];
-  let current = startHour * 60 + startMin;
-  const end = endHour * 60 + endMin;
-  while (current <= end) {
-    const h = Math.floor(current / 60);
-    const m = current % 60;
-    times.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
-    current += 30;
+interface AvailabilitySlot {
+  time: string;
+  isOpen: boolean;
+  occupiedCount: number;
+  remainingCapacity: number;
+  isFull: boolean;
+  hasReservation: boolean;
+}
+
+interface AvailabilityDate {
+  date: string;
+  dayLabel: string;
+  display: string;
+  slots: AvailabilitySlot[];
+}
+
+interface AvailabilityResponse {
+  area: {
+    id: string;
+    name: string;
+    maxCapacity: number;
+  };
+  dates: AvailabilityDate[];
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")
+  : "";
+
+function addMinutesToTime(time: string, deltaMinutes: number) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const total = hours * 60 + minutes + deltaMinutes;
+  const nextHours = Math.floor(total / 60);
+  const nextMinutes = total % 60;
+  return String(nextHours).padStart(2, "0") + ":" + String(nextMinutes).padStart(2, "0");
+}
+
+function toIsoDateTime(date: string, time: string) {
+  return new Date(date + "T" + time + ":00").toISOString();
+}
+
+async function readErrorMessage(response: Response) {
+  const text = await response.text();
+  if (!text) {
+    return "Request failed with status " + response.status;
   }
-  return times;
-};
 
-// Start times from 10:00 to 21:30
-const startTimeOptionsList = generateTimes(10, 0, 21, 30);
-// End times from 09:30 to 22:00
-const endTimeOptionsList = generateTimes(9, 30, 22, 0);
-// Grid rows from 10:00 to 21:30 (representing the 30min blocks)
-const gridSlots = generateTimes(10, 0, 21, 30);
-
-// Mock function to determine max capacity based on resource name
-const getResourceCapacity = (resource: string) => {
-  let hash = 0;
-  for (let i = 0; i < resource.length; i++) {
-    hash = ((hash << 5) - hash) + resource.charCodeAt(i);
-    hash |= 0;
+  try {
+    const payload = JSON.parse(text) as { error?: unknown };
+    return typeof payload.error === "string" ? payload.error : "Request failed with status " + response.status;
+  } catch {
+    return text;
   }
-  const capacities = [2, 4, 6, 8, 10, 15, 20];
-  return capacities[Math.abs(hash) % capacities.length];
-};
+}
 
-// Stable mock function to determine if a slot is occupied
-const isSlotOccupied = (dateVal: string, slotTime: string, resource: string) => {
-  const str = `${dateVal}-${slotTime}-${resource}`;
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash) % 10 < 2; // 20% occupied probability
-};
-
-export function ReservationModal({ isOpen, onClose, resourceName }: ReservationModalProps) {
+export function ReservationModal({
+  isOpen,
+  onClose,
+  areaId,
+  resourceName,
+  maxCapacity,
+  onReservationCreated,
+}: ReservationModalProps) {
+  const navigate = useNavigate();
+  const { token, isAuthenticated, logout } = useAuth();
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [people, setPeople] = useState("1");
   const [isSuccess, setIsSuccess] = useState(false);
+  const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const maxPeople = useMemo(() => getResourceCapacity(resourceName), [resourceName]);
+  const effectiveMaxCapacity = availability?.area.maxCapacity ?? maxCapacity;
+  const selectedPeople = Math.max(1, Number.parseInt(people, 10) || 1);
+  const gridSlots = availability?.dates[0]?.slots.map((slot) => slot.time) ?? [];
 
-  // Reset state when opened
   useEffect(() => {
-    if (isOpen) {
-      setIsSuccess(false);
-      setDate("");
+    if (!isOpen) {
+      return;
+    }
+
+    setIsSuccess(false);
+    setDate("");
+    setStartTime("");
+    setEndTime("");
+    setPeople("1");
+    setError(null);
+    setAvailability(null);
+
+    if (!areaId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAvailability = async () => {
+      try {
+        setLoading(true);
+        const endpoint = API_BASE_URL
+          ? API_BASE_URL + "/api/areas/" + areaId + "/availability"
+          : "/api/areas/" + areaId + "/availability";
+        const response = await fetch(endpoint);
+
+        if (!response.ok) {
+          throw new Error("Availability request failed with " + response.status);
+        }
+
+        const payload = (await response.json()) as AvailabilityResponse;
+        if (!payload || !Array.isArray(payload.dates)) {
+          throw new Error("Invalid availability response");
+        }
+
+        if (!cancelled) {
+          setAvailability(payload);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          const message =
+            loadError instanceof TypeError
+              ? "Cannot reach the backend availability API."
+              : loadError instanceof Error
+                ? loadError.message
+                : "Failed to load availability";
+          setError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadAvailability();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, areaId]);
+
+  const selectedDateAvailability = useMemo(() => {
+    return availability?.dates.find((entry) => entry.date === date) ?? null;
+  }, [availability, date]);
+
+  const availableStartTimes = useMemo(() => {
+    if (!selectedDateAvailability) {
+      return [];
+    }
+
+    return selectedDateAvailability.slots
+      .filter((slot) => slot.isOpen && slot.remainingCapacity >= selectedPeople)
+      .map((slot) => slot.time);
+  }, [selectedDateAvailability, selectedPeople]);
+
+  const availableEndTimes = useMemo(() => {
+    if (!selectedDateAvailability || !startTime) {
+      return [];
+    }
+
+    const startIndex = selectedDateAvailability.slots.findIndex((slot) => slot.time === startTime);
+    if (startIndex === -1) {
+      return [];
+    }
+
+    const endTimes: string[] = [];
+
+    for (let index = startIndex; index < selectedDateAvailability.slots.length; index += 1) {
+      const slot = selectedDateAvailability.slots[index];
+      if (!slot.isOpen || slot.remainingCapacity < selectedPeople) {
+        break;
+      }
+
+      endTimes.push(addMinutesToTime(slot.time, 30));
+    }
+
+    return endTimes;
+  }, [selectedDateAvailability, startTime, selectedPeople]);
+
+  useEffect(() => {
+    if (startTime && !availableStartTimes.includes(startTime)) {
       setStartTime("");
       setEndTime("");
-      setPeople("1");
     }
-  }, [isOpen]);
+  }, [availableStartTimes, startTime]);
 
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  useEffect(() => {
+    if (endTime && !availableEndTimes.includes(endTime)) {
+      setEndTime("");
+    }
+  }, [availableEndTimes, endTime]);
 
-  // Calculate the next 5 non-weekend dates mapping to Mon-Fri
-  const mappedDates = useMemo(() => {
-    const dates: Record<string, { display: string, value: string, chronological: Date }> = {};
-    const next5 = [];
-    let curr = new Date(); // Mocking "today" 
-    
-    while (next5.length < 5) {
-      const d = curr.getDay();
-      if (d !== 0 && d !== 6) { // Skip Sun, Sat
-        next5.push(new Date(curr));
+  if (!isOpen) {
+    return null;
+  }
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!isAuthenticated || !token) {
+      setError("Please log in before making a reservation.");
+      return;
+    }
+
+    if (!areaId || !date || !startTime || !endTime) {
+      setError("Please choose a valid reservation time range.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const endpoint = API_BASE_URL ? API_BASE_URL + "/api/reservations" : "/api/reservations";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({
+          areaId,
+          startTime: toIsoDateTime(date, startTime),
+          endTime: toIsoDateTime(date, endTime),
+          participantCount: selectedPeople,
+          purpose: resourceName + " reservation",
+          plannedItems: [],
+          when2meet: "",
+          project: "",
+        }),
+      });
+
+      if (response.status === 401) {
+        logout();
+        throw new Error("Your session expired. Please log in again.");
       }
-      curr.setDate(curr.getDate() + 1);
-    }
-    
-    next5.forEach(d => {
-      const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
-      dates[dayName] = {
-        display: `${d.getMonth() + 1}/${d.getDate()}`,
-        value: d.toISOString().split('T')[0],
-        chronological: d
-      };
-    });
-    return dates;
-  }, []);
 
-  // Filter available start times for the selected date
-  const availableStartTimes = useMemo(() => {
-    if (!date) return [];
-    return startTimeOptionsList.filter(t => !isSlotOccupied(date, t, resourceName));
-  }, [date, resourceName]);
-
-  // Filter available end times based on selected start time
-  const availableEndTimes = useMemo(() => {
-    if (!date || !startTime) return [];
-    
-    // We only want end times > start time
-    const validEndTimes = endTimeOptionsList.filter(t => t > startTime);
-    const available = [];
-    
-    for (const et of validEndTimes) {
-      // Check for any occupied slots between startTime and et
-      let hasConflict = false;
-      let curr = startTime;
-      
-      while (curr < et) {
-        if (isSlotOccupied(date, curr, resourceName)) {
-          hasConflict = true;
-          break;
-        }
-        
-        // Add 30 mins to curr
-        const [h, m] = curr.split(':').map(Number);
-        const nextMin = m + 30;
-        curr = `${String(h + Math.floor(nextMin/60)).padStart(2, '0')}:${String(nextMin % 60).padStart(2, '0')}`;
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
       }
-      
-      if (hasConflict) break; // If we hit a block, we can't select any end time past it
-      available.push(et);
+
+      setIsSuccess(true);
+      onReservationCreated?.();
+      window.setTimeout(() => {
+        onClose();
+      }, 1600);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Reservation failed");
+    } finally {
+      setSubmitting(false);
     }
-    
-    return available;
-  }, [date, startTime, resourceName]);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSuccess(true);
-    setTimeout(() => {
-      onClose();
-    }, 2000);
   };
+
+  const handleSlotClick = (day: AvailabilityDate, slot: AvailabilitySlot) => {
+    if (!slot.isOpen || slot.remainingCapacity < selectedPeople) {
+      return;
+    }
+
+    const clickedEndTime = addMinutesToTime(slot.time, 30);
+
+    if (date !== day.date || !startTime) {
+      setDate(day.date);
+      setStartTime(slot.time);
+      setEndTime(clickedEndTime);
+      return;
+    }
+
+    if (slot.time < startTime) {
+      setDate(day.date);
+      setStartTime(slot.time);
+      setEndTime(clickedEndTime);
+      return;
+    }
+
+    if (availableEndTimes.includes(clickedEndTime)) {
+      setDate(day.date);
+      setEndTime(clickedEndTime);
+      return;
+    }
+
+    setDate(day.date);
+    setStartTime(slot.time);
+    setEndTime(clickedEndTime);
+  };
+
+  const submitDisabled = !isAuthenticated || loading || submitting || !date || !startTime || !endTime;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-        
-        {/* Close Button */}
-        <button 
+      <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+        <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors z-10"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Left Side: Form (40%) */}
         <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50">
           <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-100 mb-1">Reserve Space</h2>
@@ -169,32 +321,59 @@ export function ReservationModal({ isOpen, onClose, resourceName }: ReservationM
               <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-100">Reservation Confirmed!</h3>
-              <p className="text-sm text-slate-400 mt-2">Your slot has been successfully booked.</p>
+              <h3 className="text-lg font-semibold text-slate-100">Reservation Confirmed</h3>
+              <p className="text-sm text-slate-400 mt-2">Your booking has been saved to the backend.</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
+              {!isAuthenticated ? (
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+                  <div className="font-medium">Login required</div>
+                  <div className="mt-1 text-sky-100/80">You can browse availability first, but only signed-in users can submit reservations.</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigate("/login");
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-medium text-sky-100 hover:bg-sky-400/20"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Go to Login
+                  </button>
+                </div>
+              ) : null}
+
+              {error ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  {error}
+                </div>
+              ) : null}
+
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-slate-500" />
                   Select Date
                 </label>
                 <div className="relative">
-                  <select 
+                  <select
                     required
+                    disabled={loading || !availability}
                     value={date}
-                    onChange={(e) => {
-                      setDate(e.target.value);
+                    onChange={(event) => {
+                      setDate(event.target.value);
                       setStartTime("");
                       setEndTime("");
                     }}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>Select next 5 non-weekend days...</option>
-                    {Object.values(mappedDates)
-                      .sort((a, b) => a.chronological.getTime() - b.chronological.getTime())
-                      .map(d => (
-                        <option key={d.value} value={d.value}>{d.display} ({(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'])[d.chronological.getDay()]})</option>
+                    <option value="" disabled>
+                      {loading ? "Loading availability..." : "Select next 5 non-weekend days..."}
+                    </option>
+                    {availability?.dates.map((entry) => (
+                      <option key={entry.date} value={entry.date}>
+                        {entry.display} ({entry.dayLabel})
+                      </option>
                     ))}
                   </select>
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -208,30 +387,33 @@ export function ReservationModal({ isOpen, onClose, resourceName }: ReservationM
                   <Clock className="w-4 h-4 text-slate-500" />
                   Reservation Duration
                 </label>
+                <p className="text-xs text-slate-500">
+                  Click a start slot, then click a later free slot on the same day to extend the reservation.
+                </p>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 space-y-1">
                     <span className="text-[10px] uppercase tracking-wider text-slate-500 pl-1">Start Time</span>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Clock className={`w-3.5 h-3.5 ${!date ? 'text-slate-700' : 'text-slate-500'}`} />
+                        <Clock className={(!date ? "text-slate-700" : "text-slate-500") + " w-3.5 h-3.5"} />
                       </div>
-                      <select 
+                      <select
                         required
                         disabled={!date}
                         value={startTime}
-                        onChange={(e) => {
-                          setStartTime(e.target.value);
+                        onChange={(event) => {
+                          setStartTime(event.target.value);
                           setEndTime("");
                         }}
                         className="w-full pl-9 pr-8 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="" disabled>--:--</option>
-                        {availableStartTimes.map(t => (
-                          <option key={t} value={t}>{t}</option>
+                        {availableStartTimes.map((time) => (
+                          <option key={time} value={time}>{time}</option>
                         ))}
                       </select>
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <svg className={`w-4 h-4 ${!date ? 'text-slate-700' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg className={(!date ? "text-slate-700" : "text-slate-500") + " w-4 h-4"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                       </div>
                     </div>
                   </div>
@@ -240,22 +422,22 @@ export function ReservationModal({ isOpen, onClose, resourceName }: ReservationM
                     <span className="text-[10px] uppercase tracking-wider text-slate-500 pl-1">End Time</span>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Clock className={`w-3.5 h-3.5 ${!startTime ? 'text-slate-700' : 'text-slate-500'}`} />
+                        <Clock className={(!startTime ? "text-slate-700" : "text-slate-500") + " w-3.5 h-3.5"} />
                       </div>
-                      <select 
+                      <select
                         required
                         disabled={!startTime}
                         value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
+                        onChange={(event) => setEndTime(event.target.value)}
                         className="w-full pl-9 pr-8 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="" disabled>--:--</option>
-                        {availableEndTimes.map(t => (
-                          <option key={t} value={t}>{t}</option>
+                        {availableEndTimes.map((time) => (
+                          <option key={time} value={time}>{time}</option>
                         ))}
                       </select>
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <svg className={`w-4 h-4 ${!startTime ? 'text-slate-700' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg className={(!startTime ? "text-slate-700" : "text-slate-500") + " w-4 h-4"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                       </div>
                     </div>
                   </div>
@@ -266,20 +448,20 @@ export function ReservationModal({ isOpen, onClose, resourceName }: ReservationM
                 <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
                   <UsersIcon className="w-4 h-4 text-slate-500" />
                   Number of People
-                  <span className="text-xs text-slate-500 font-normal ml-auto">Max capacity: {maxPeople}</span>
+                  <span className="text-xs text-slate-500 font-normal ml-auto">Max capacity: {effectiveMaxCapacity}</span>
                 </label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  max={maxPeople}
+                <input
+                  type="number"
+                  min="1"
+                  max={effectiveMaxCapacity}
                   required
                   value={people}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    if (!isNaN(val) && val > maxPeople) {
-                      setPeople(maxPeople.toString());
+                  onChange={(event) => {
+                    const nextValue = Number.parseInt(event.target.value, 10);
+                    if (!Number.isNaN(nextValue) && nextValue > effectiveMaxCapacity) {
+                      setPeople(String(effectiveMaxCapacity));
                     } else {
-                      setPeople(e.target.value);
+                      setPeople(event.target.value);
                     }
                   }}
                   className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
@@ -287,25 +469,29 @@ export function ReservationModal({ isOpen, onClose, resourceName }: ReservationM
               </div>
 
               <div className="pt-4">
-                <button 
+                <button
                   type="submit"
-                  className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]"
+                  disabled={submitDisabled}
+                  className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]"
                 >
-                  Confirm Reservation
+                  {submitting ? "Saving Reservation..." : isAuthenticated ? "Confirm Reservation" : "Log In to Reserve"}
                 </button>
               </div>
             </form>
           )}
         </div>
 
-        {/* Right Side: Availability Grid (60%) */}
         <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col h-[500px]">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
             <h3 className="text-sm font-semibold tracking-wider text-slate-400 uppercase">Availability Overview</h3>
-            <div className="flex items-center gap-4 text-xs font-medium">
+            <div className="flex items-center gap-4 text-xs font-medium flex-wrap">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm bg-slate-800 border border-slate-700"></div>
                 <span className="text-slate-500">Free</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-sm bg-slate-950 border border-slate-700"></div>
+                <span className="text-slate-500">Closed</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm bg-emerald-500/20 border border-emerald-500/50"></div>
@@ -313,48 +499,59 @@ export function ReservationModal({ isOpen, onClose, resourceName }: ReservationM
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-sm bg-rose-500/20 border border-rose-500/50"></div>
-                <span className="text-rose-400">Occupied</span>
+                <span className="text-rose-400">Full</span>
               </div>
             </div>
           </div>
 
           <div className="flex-1 overflow-auto custom-scrollbar pr-2">
             <div className="min-w-max">
-              {/* Header Row */}
               <div className="flex">
-                <div className="w-16 shrink-0"></div> {/* Empty corner */}
-                {days.map(day => (
-                  <div key={day} className="w-20 flex flex-col items-center justify-center text-xs font-semibold text-slate-500 py-1">
-                    <span>{day}</span>
-                    <span className="text-[10px] text-slate-600 font-medium">
-                      {mappedDates[day]?.display || "--/--"}
-                    </span>
+                <div className="w-16 shrink-0"></div>
+                {availability?.dates.map((day) => (
+                  <div key={day.date} className="w-20 flex flex-col items-center justify-center text-xs font-semibold text-slate-500 py-1">
+                    <span>{day.dayLabel}</span>
+                    <span className="text-[10px] text-slate-600 font-medium">{day.display}</span>
                   </div>
                 ))}
               </div>
 
-              {/* Grid Rows */}
-              {gridSlots.map((slot) => (
-                <div key={slot} className="flex group">
+              {gridSlots.map((slotTime) => (
+                <div key={slotTime} className="flex group">
                   <div className="w-16 shrink-0 text-right pr-4 py-1 text-[10px] font-medium text-slate-500 self-center group-hover:text-slate-300 transition-colors">
-                    {slot}
+                    {slotTime}
                   </div>
-                  {days.map((day) => {
-                    const mappedDateVal = mappedDates[day]?.value;
-                    const isOccupied = mappedDateVal ? isSlotOccupied(mappedDateVal, slot, resourceName) : false;
-                    
-                    const isSelected = date === mappedDateVal && startTime !== "" && endTime !== "" && 
-                                       slot >= startTime && slot < endTime;
+                  {availability?.dates.map((day) => {
+                    const slot = day.slots.find((entry) => entry.time === slotTime);
+                    if (!slot) {
+                      return <div key={day.date + "-" + slotTime} className="w-20 h-8 border border-slate-800/50 m-[1px] rounded-sm bg-slate-950/80" />;
+                    }
+
+                    const isSelected = date === day.date && startTime !== "" && endTime !== "" && slotTime >= startTime && slotTime < endTime;
+                    const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople;
+                    const title = !slot.isOpen
+                      ? "Closed"
+                      : slot.remainingCapacity < selectedPeople
+                        ? "Only " + slot.remainingCapacity + " spot(s) remaining"
+                        : slot.hasReservation
+                          ? String(slot.occupiedCount) + " in use, " + String(slot.remainingCapacity) + " remaining"
+                          : "Free";
+                    const classNames = [
+                      "w-20 h-8 border m-[1px] rounded-sm transition-colors text-left",
+                      !slot.isOpen ? "bg-slate-950 border-slate-800 cursor-not-allowed" : "",
+                      slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/20 cursor-not-allowed" : "",
+                      slot.isOpen && slot.remainingCapacity >= selectedPeople && !isSelected ? "bg-slate-900/40 hover:bg-slate-800 border-slate-800/50 cursor-pointer" : "",
+                      isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "",
+                    ].filter(Boolean).join(" ");
 
                     return (
-                      <div 
-                        key={`${day}-${slot}`} 
-                        className={`w-20 h-8 border border-slate-800/50 m-[1px] rounded-sm transition-colors cursor-pointer
-                          ${isOccupied ? 'bg-rose-500/10 border-rose-500/20 cursor-not-allowed' : 
-                            isSelected ? 'bg-emerald-500/30 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 
-                            'bg-slate-900/40 hover:bg-slate-800'}`
-                        }
-                        title={isOccupied ? 'Occupied' : 'Free'}
+                      <button
+                        key={day.date + "-" + slotTime}
+                        type="button"
+                        onClick={() => handleSlotClick(day, slot)}
+                        disabled={!isClickable}
+                        title={title}
+                        className={classNames}
                       />
                     );
                   })}

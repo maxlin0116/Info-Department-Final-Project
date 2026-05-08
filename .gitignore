@@ -3,3 +3,5 @@ node_modules/
 backend/.env
 frontend/.env
 *.log
+.vscode/
+frontend/dist/

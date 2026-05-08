@@ -21,14 +21,21 @@ app.use("/api/areas", areaRoutes);
 app.use("/api/reservations", reservationRoutes);
 app.use("/api/admin", adminRoutes);
 
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.json({ message: "MKS Reservation API" });
+});
+
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(error.statusCode || 500).json({
+    error: error.message || "Internal server error",
+  });
 });
 
 connectDatabase()
   .then(() => {
     app.listen(port, () => {
-      console.log(`Server is running on port ${port}`);
+      console.log("Server is running on port " + port);
     });
   })
   .catch((error) => {

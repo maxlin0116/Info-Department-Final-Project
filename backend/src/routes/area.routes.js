@@ -1,11 +1,10 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const areaController = require('../controllers/area.controller');
+const areaController = require("../controllers/area.controller");
 
-router.get('/', areaController.getAllAreas);
-
-router.get('/status', areaController.getAllAreasStatus);
-
-router.get('/:id/status', areaController.getAreaStatusById);
+router.get("/", areaController.getAllAreas);
+router.get("/status", areaController.getAllAreasStatus);
+router.get("/:id/availability", areaController.getAreaAvailability);
+router.get("/:id/status", areaController.getAreaStatusById);
 
 module.exports = router;

@@ -1,60 +1,68 @@
-const authService = require('../services/auth.service');
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const authService = require("../services/auth.service");
+const emailRegex = /^[^s@]+@[^s@]+.[^s@]+$/;
 
 exports.register = async (req, res, next) => {
-    try {
-        const { name, grade, student_id, password, personal_email } = req.body;
-        if (!name || !grade || !student_id || !password || !personal_email) {
-            return res.status(400).json({ error: 'All fields are required' });
-        }
+  try {
+    const name = req.body.name;
+    const grade = req.body.grade;
+    const studentId = req.body.studentId ?? req.body.student_id;
+    const password = req.body.password;
+    const personalEmail = req.body.personalEmail ?? req.body.personal_email;
 
-       if (!emailRegex.test(personal_email)) {
-            return res.status(400).json({ error: 'Invalid email format. Please check for missing @ or .' });
-        }
-
-        const newUser = await authService.registerUser({
-            name, grade, student_id, password, personal_email
-        });
-
-        res.status(201).json({ message: 'Registration successful', user: newUser });
-    } catch (error) {
-        next(error);
+    if (!name || !grade || !studentId || !password || !personalEmail) {
+      return res.status(400).json({ error: "All fields are required" });
     }
+
+    if (!emailRegex.test(personalEmail)) {
+      return res.status(400).json({ error: "Invalid email format. Please check for missing @ or ." });
+    }
+
+    const result = await authService.registerUser({
+      name,
+      grade,
+      studentId,
+      password,
+      personalEmail,
+    });
+
+    res.status(201).json({ message: "Registration successful", ...result });
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.login = async (req, res, next) => {
-    try {
-        const { student_id, password } = req.body;
+  try {
+    const studentId = req.body.studentId ?? req.body.student_id;
+    const password = req.body.password;
 
-        if (!student_id || !password) {
-            return res.status(400).json({ error: 'Please provide student ID and password' });
-        }
-
-        const result = await authService.loginUser(student_id, password);
-        
-        res.status(200).json({ message: 'Login successful', ...result });
-    } catch (error) {
-        next(error);
+    if (!studentId || !password) {
+      return res.status(400).json({ error: "Please provide student ID and password" });
     }
+
+    const result = await authService.loginUser(studentId, password);
+    res.status(200).json({ message: "Login successful", ...result });
+  } catch (error) {
+    next(error);
+  }
 };
 
-exports.logout = async (req, res, next) => {
-    try {
-        // If using JWT, the frontend just needs to clear the token. The backend might not need to do anything, or it could blacklist the token.
-        res.status(200).json({ message: 'Logout successful' });
-    } catch (error) {
-        next(error);
-    }
+exports.logout = async (_req, res, next) => {
+  try {
+    res.status(200).json({ message: "Logout successful" });
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.getMe = async (req, res, next) => {
-    try {
-        // req.user should be set in auth.middleware
-        if (!req.user) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-        res.status(200).json({ user: req.user });
-    } catch (error) {
-        next(error);
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
+
+    res.status(200).json({ user: req.user });
+  } catch (error) {
+    next(error);
+  }
 };

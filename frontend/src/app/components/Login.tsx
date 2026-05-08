@@ -1,7 +1,35 @@
-import { Link } from "react-router";
+import { FormEvent, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router";
 import { Cpu, ArrowRight } from "lucide-react";
+import { useAuth } from "../auth";
 
 export function Login() {
+  const navigate = useNavigate();
+  const { login, isAuthenticated } = useAuth();
+  const [studentId, setStudentId] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await login({ studentId, password });
+      navigate("/", { replace: true });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Login failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[80vh] px-4">
       <div className="w-full max-w-md">
@@ -14,41 +42,51 @@ export function Login() {
         </div>
 
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
-          <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+          <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-300">Account / Username</label>
-              <input 
-                type="text" 
-                placeholder="e.g. s1234567"
+              <label className="text-sm font-medium text-slate-300">Student ID</label>
+              <input
+                type="text"
+                required
+                value={studentId}
+                onChange={(event) => setStudentId(event.target.value)}
+                placeholder="e.g. b10901001"
                 className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-slate-300">Password</label>
-                <a href="#" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">Forgot password?</a>
-              </div>
-              <input 
-                type="password" 
+              <label className="text-sm font-medium text-slate-300">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 placeholder="••••••••"
                 className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
             </div>
 
+            {error ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                {error}
+              </div>
+            ) : null}
+
             <div className="pt-2">
-              <button 
+              <button
                 type="submit"
-                className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2"
+                disabled={submitting}
+                className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2"
               >
-                Log In
+                {submitting ? "Signing In..." : "Log In"}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
 
           <div className="mt-6 text-center text-sm text-slate-400">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{" "}
             <Link to="/register" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
               Sign up
             </Link>
