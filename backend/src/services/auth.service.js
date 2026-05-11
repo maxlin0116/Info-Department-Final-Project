@@ -6,7 +6,11 @@ const JWT_EXPIRES_IN = "7d";
 const STUDENT_ID_REGEX = /^[a-zA-Z]\d{8}$/;
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || "development-only-secret";
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is not configured");
+  }
+  return secret;
 }
 
 function getAdminAccessPassword() {
@@ -91,7 +95,7 @@ exports.registerUser = async (userData) => {
   };
 };
 
-exports.loginUser = async (studentId, password, options = {}) => {
+exports.loginUser = async (studentId, password) => {
   const normalizedStudentId = studentId?.trim();
   if (!normalizedStudentId || !password) {
     throw createError(400, "Please provide student ID and password");
@@ -107,29 +111,8 @@ exports.loginUser = async (studentId, password, options = {}) => {
     throw createError(401, "Invalid student ID or password");
   }
 
-  let sessionRole = user.role;
-
-  if (options.asAdmin) {
-    const providedAdminPassword = options.adminPassword?.trim();
-    const configuredAdminPassword = getAdminAccessPassword();
-
-    if (!providedAdminPassword) {
-      throw createError(400, "Please provide the admin access password");
-    }
-
-    if (!configuredAdminPassword) {
-      throw createError(500, "Admin access password is not configured on the server");
-    }
-
-    if (providedAdminPassword !== configuredAdminPassword) {
-      throw createError(403, "Invalid admin access password");
-    }
-
-    sessionRole = "admin";
-  }
-
   return {
-    token: issueToken(user, sessionRole),
-    user: serializeUser(user, sessionRole),
+    token: issueToken(user),
+    user: serializeUser(user),
   };
 };

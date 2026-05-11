@@ -32,10 +32,21 @@ function matchesOrigin(pattern, origin) {
     return pattern === origin;
   }
 
-  const regex = new RegExp(
-    `^${pattern.split("*").map((segment) => escapeRegex(segment)).join(".*")}$`
-  );
+  const parts = pattern.split("*");
+  const regexParts = [];
 
+  for (let i = 0; i < parts.length; i++) {
+    regexParts.push(escapeRegex(parts[i]));
+    if (i < parts.length - 1) {
+      if (parts[i].endsWith(":")) {
+        regexParts.push("[0-9]+");
+      } else {
+        regexParts.push("[a-zA-Z0-9.-]+");
+      }
+    }
+  }
+
+  const regex = new RegExp(`^${regexParts.join("")}$`);
   return regex.test(origin);
 }
 
