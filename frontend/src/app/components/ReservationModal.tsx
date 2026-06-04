@@ -770,13 +770,19 @@ export function ReservationModal({
                             onClick={() => handleSlotClick(day, slot)}
                             disabled={!isClickable}
                             title={title}
-                            className={`w-20 border m-[0.5px] rounded-[1px] transition-all duration-150 ${
-                              !slot.isOpen || isPast ? "bg-slate-950 border-slate-800/50 cursor-not-allowed" :
-                              slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/30 cursor-not-allowed" :
-                              isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[inset_0_0_10px_rgba(16,185,129,0.2)] z-1" :
-                              "bg-slate-900/40 border-slate-800/50 cursor-pointer"
+                            className={`w-20 border m-[0.5px] rounded-[1px] transition-all duration-150 flex items-center justify-center ${
+                              !slot.isOpen || isPast ? "bg-slate-950 border-slate-800/50 cursor-not-allowed text-slate-700" :
+                              slot.isOpen && slot.remainingCapacity < selectedPeople ? "bg-rose-500/10 border-rose-500/30 cursor-not-allowed text-rose-400/80" :
+                              isSelected ? "bg-emerald-500/30 border-emerald-500/50 shadow-[inset_0_0_10px_rgba(16,185,129,0.2)] z-1 text-emerald-400 font-semibold" :
+                              "bg-slate-900/40 border-slate-800/50 cursor-pointer text-slate-500 hover:text-slate-300"
                             }`}
-                          />
+                          >
+                            {slot.isOpen && !isPast && (
+                              <span className="text-[9px] font-mono">
+                                {slot.occupiedCount}/{effectiveMaxCapacity}
+                              </span>
+                            )}
+                          </motion.button>
                         );
                       })}
                     </div>
