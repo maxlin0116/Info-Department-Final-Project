@@ -3,7 +3,11 @@ const User = require("../models/user.model");
 const { serializeUser } = require("../services/auth.service");
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || "development-only-secret";
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is not configured");
+  }
+  return secret;
 }
 
 function getBearerToken(req) {

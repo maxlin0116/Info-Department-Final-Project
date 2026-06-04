@@ -75,8 +75,6 @@ function serializeUser(user) {
     id: String(user._id ?? user.id),
     name: user.name,
     grade: user.grade,
-    studentId: user.studentId,
-    personalEmail: user.personalEmail,
     role: user.role,
   };
 }
