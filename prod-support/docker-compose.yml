@@ -1,0 +1,46 @@
+name: mks-reservation
+
+services:
+  mks-reservation-web:
+    container_name: mks-reservation-web
+    build:
+      context: ..
+      dockerfile: prod-support/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mks-reservation-mongo:27017/mks_reservation}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_ACCESS_PASSWORD: ${ADMIN_ACCESS_PASSWORD}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://mks.example.ntuee.org}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-}
+      AUTO_SEED_DATA: ${AUTO_SEED_DATA:-true}
+    ports:
+      - "4000:4000"
+    expose:
+      - "4000"
+    depends_on:
+      - mks-reservation-mongo
+    networks:
+      - mks-reservation
+      - nginx
+    restart: unless-stopped
+
+  mks-reservation-mongo:
+    container_name: mks-reservation-mongo
+    image: mongo:7
+    expose:
+      - "27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - mks-reservation
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+
+networks:
+  nginx:
+    external: true
+  mks-reservation:

@@ -246,9 +246,12 @@ async function seedOpeningHours() {
   await mongoose.disconnect();
 }
 
-// Execute the seeding function and handle any errors that occur during the process
-seedOpeningHours().catch(async (error) => {
-  console.error("Failed to seed opening hours", error);
-  await mongoose.disconnect();
-  process.exit(1);
-});
+module.exports = { openingHours, seedOpeningHours };
+
+if (require.main === module) {
+  seedOpeningHours().catch(async (error) => {
+    console.error("Failed to seed opening hours", error);
+    await mongoose.disconnect();
+    process.exit(1);
+  });
+}

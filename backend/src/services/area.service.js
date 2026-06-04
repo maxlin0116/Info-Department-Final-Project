@@ -1,6 +1,16 @@
 const Area = require("../models/area.model");
 const Reservation = require("../models/reservation.model");
 const OpeningHour = require("../models/openingHour.model");
+const {
+  addBusinessDays,
+  endOfBusinessDay,
+  formatBusinessDate,
+  formatBusinessDisplayDate,
+  getBusinessDayOfWeek,
+  parseBusinessDateInput,
+  setTimeOnBusinessDate,
+  startOfBusinessDay,
+} = require("../utils/businessDateTime");
 
 const SLOT_ALIGNMENT_MINUTES = 30;
 const DEFAULT_AVAILABILITY_DAYS = 5;
@@ -31,58 +41,29 @@ function minutesToTime(totalMinutes) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatDisplayDate(date) {
-  return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function startOfDay(date) {
-  const value = new Date(date);
-  value.setHours(0, 0, 0, 0);
-  return value;
-}
-
-function endOfDay(date) {
-  const value = new Date(date);
-  value.setHours(23, 59, 59, 999);
-  return value;
-}
-
-function setTimeOnDate(date, minutes) {
-  const value = new Date(date);
-  value.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
-  return value;
-}
-
 function normalizeAvailabilityStartDate(input) {
   if (!input) {
-    return startOfDay(new Date());
+    return startOfBusinessDay(new Date());
   }
 
-  const parsed = new Date(`${input}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return startOfDay(new Date());
+  const parsed = parseBusinessDateInput(input);
+  if (!parsed) {
+    return startOfBusinessDay(new Date());
   }
 
-  return startOfDay(parsed);
+  return parsed;
 }
 
 function getNextWeekdays(startDate, count) {
   const dates = [];
-  const cursor = startOfDay(startDate);
+  let cursor = startOfBusinessDay(startDate);
 
   while (dates.length < count) {
-    const dayOfWeek = cursor.getDay();
+    const dayOfWeek = getBusinessDayOfWeek(cursor);
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
       dates.push(new Date(cursor));
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor = addBusinessDays(cursor, 1);
   }
 
   return dates;
@@ -194,15 +175,15 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
 
   const firstDate = normalizeAvailabilityStartDate(startDate);
   const dates = getNextWeekdays(firstDate, totalDays);
-  const dayNumbers = [...new Set(dates.map((date) => date.getDay()))];
+  const dayNumbers = [...new Set(dates.map((date) => getBusinessDayOfWeek(date)))];
 
   const [openingHours, reservations] = await Promise.all([
     OpeningHour.find({ dayOfWeek: { $in: dayNumbers }, isOpen: true }).lean(),
     Reservation.find({
       area: area._id,
       status: { $in: ACTIVE_RESERVATION_STATUSES },
-      startTime: { $lt: endOfDay(dates[dates.length - 1]) },
-      endTime: { $gt: startOfDay(dates[0]) },
+      startTime: { $lt: endOfBusinessDay(dates[dates.length - 1]) },
+      endTime: { $gt: startOfBusinessDay(dates[0]) },
     })
       .select("startTime endTime participantCount")
       .lean(),
@@ -219,17 +200,17 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
   return {
     area: toAreaPayload(area),
     dates: dates.map((date) => {
-      const dayOfWeek = date.getDay();
+      const dayOfWeek = getBusinessDayOfWeek(date);
       const dayOpeningHours = openingHoursByDay.get(dayOfWeek) || [];
       const daySlotRanges = buildSlotRangesForOpeningHours(dayOpeningHours);
 
       return {
-        date: formatDate(date),
+        date: formatBusinessDate(date),
         dayLabel: DAY_LABELS[dayOfWeek],
-        display: formatDisplayDate(date),
+        display: formatBusinessDisplayDate(date),
         slots: daySlotRanges.map((slotRange) => {
-          const slotStart = setTimeOnDate(date, slotRange.startMinutes);
-          const slotEnd = setTimeOnDate(date, slotRange.endMinutes);
+          const slotStart = setTimeOnBusinessDate(date, slotRange.startMinutes);
+          const slotEnd = setTimeOnBusinessDate(date, slotRange.endMinutes);
           const isOpen = area.isActive;
 
           const occupiedCount = reservations.reduce((sum, reservation) => {

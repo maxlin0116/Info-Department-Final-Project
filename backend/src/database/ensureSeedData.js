@@ -1,0 +1,53 @@
+const dotenv = require("dotenv");
+const mongoose = require("mongoose");
+
+const connectDatabase = require("./db");
+const Area = require("../models/area.model");
+const OpeningHour = require("../models/openingHour.model");
+const { areas } = require("./seedAreas");
+const { openingHours } = require("./seedOpeningHours");
+
+dotenv.config();
+
+function shouldAutoSeed() {
+  const value = (process.env.AUTO_SEED_DATA || "true").trim().toLowerCase();
+  return value !== "0" && value !== "false" && value !== "no";
+}
+
+async function ensureCollectionData(Model, label, records) {
+  const count = await Model.countDocuments();
+
+  if (count > 0) {
+    console.log(`${label} already present (${count})`);
+    return;
+  }
+
+  await Model.insertMany(records);
+  console.log(`${label} seeded`);
+}
+
+async function ensureSeedData() {
+  if (!shouldAutoSeed()) {
+    console.log("AUTO_SEED_DATA disabled; skipping seed");
+    return;
+  }
+
+  await connectDatabase();
+
+  try {
+    await ensureCollectionData(Area, "Areas", areas);
+    await ensureCollectionData(OpeningHour, "Opening hours", openingHours);
+  } finally {
+    await mongoose.disconnect();
+  }
+}
+
+module.exports = { ensureSeedData };
+
+if (require.main === module) {
+  ensureSeedData().catch(async (error) => {
+    console.error("Failed to ensure seed data", error);
+    await mongoose.disconnect();
+    process.exit(1);
+  });
+}

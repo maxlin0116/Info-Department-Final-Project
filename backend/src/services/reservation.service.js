@@ -1,5 +1,11 @@
 const Reservation = require("../models/reservation.model");
 const Area = require("../models/area.model");
+const {
+  getBusinessDayOfWeek,
+  getBusinessMinutesOfDay,
+  isSameBusinessDate,
+  parseBusinessDateTimeInput,
+} = require("../utils/businessDateTime");
 
 const VALID_TIME_BLOCKS = [
   { start: 10 * 60, end: 12 * 60 },
@@ -17,8 +23,8 @@ function createError(statusCode, message) {
 }
 
 function normalizeDate(value, fieldName) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseBusinessDateTimeInput(value);
+  if (!date || Number.isNaN(date.getTime())) {
     throw createError(400, "Invalid " + fieldName + ". Please provide a valid date/time.");
   }
 
@@ -30,16 +36,16 @@ function isWithinOpeningHours(startTime, endTime) {
     return false;
   }
 
-  if (startTime.getDay() === 0 || startTime.getDay() === 6) {
+  if (getBusinessDayOfWeek(startTime) === 0 || getBusinessDayOfWeek(startTime) === 6) {
     return false;
   }
 
-  if (startTime.toDateString() !== endTime.toDateString()) {
+  if (!isSameBusinessDate(startTime, endTime)) {
     return false;
   }
 
-  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
-  const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
+  const startMinutes = getBusinessMinutesOfDay(startTime);
+  const endMinutes = getBusinessMinutesOfDay(endTime);
 
   return VALID_TIME_BLOCKS.some((block) => startMinutes >= block.start && endMinutes <= block.end);
 }

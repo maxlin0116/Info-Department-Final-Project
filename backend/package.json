@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "node src/app.js",
+    "prod": "node src/database/ensureSeedData.js && node src/app.js",
     "seed": "npm run seed:areas && npm run seed:opening-hours",
+    "seed:ensure": "node src/database/ensureSeedData.js",
     "seed:areas": "node src/database/seedAreas.js",
     "seed:opening-hours": "node src/database/seedOpeningHours.js"
   },

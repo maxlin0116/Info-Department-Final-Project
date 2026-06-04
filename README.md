@@ -65,6 +65,7 @@ PORT=8000
 MONGODB_URI=<your mongodb connection string>
 JWT_SECRET=<your jwt secret>
 ADMIN_ACCESS_PASSWORD=<your admin access password>
+FRONTEND_ORIGIN=http://localhost:5173
 ```
 
 2. Install dependencies and start the API:
@@ -98,78 +99,133 @@ Default local URLs:
 
 ## Production Deployment
 
-Recommended production setup for this project:
-
-- Frontend: Vercel
-- Backend: Render Web Service
-- Database: MongoDB Atlas
-
-### 1. MongoDB Atlas
-
-Create or reuse an Atlas cluster, then prepare:
-
-- A database user for the application
-- A connection string for `MONGODB_URI`
-- A project IP Access List entry that allows your deployed backend to connect
-
-Atlas only allows clients whose IP or CIDR is listed in the project's IP Access List. If you cannot provide a fixed backend egress address, the simplest hosted setup is often to temporarily allow `0.0.0.0/0`, but Atlas warns that this allows access from anywhere and should be used carefully with strong database credentials.
-
-### 2. Deploy the Backend to Render
-
-Create a new Render Web Service from this repository and set the service root directory to `backend`.
-
-Recommended Render settings:
-
-- Build Command: `npm install`
-- Start Command: `npm start`
-
-Required environment variables:
-
-- `MONGODB_URI`
-- `JWT_SECRET`
-- `ADMIN_ACCESS_PASSWORD`
-- `FRONTEND_ORIGIN`
-
-Example:
+This repository now includes a deployment setup that matches the department server flow from class:
 
 ```txt
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>?retryWrites=true&w=majority
+browser -> Nginx Proxy Manager -> web container -> MongoDB container
+```
+
+In this setup:
+
+- the frontend is built by Vite during the Docker image build
+- the backend serves the built `frontend/dist`
+- MongoDB stays inside the compose network
+- Nginx Proxy Manager forwards external traffic to the web container
+
+### Files Added for Deployment
+
+- `prod-support/Dockerfile`
+- `prod-support/docker-compose.yml`
+- `prod-support/.env.example`
+- `backend/.env.example`
+
+### 1. Prepare Environment Variables
+
+Copy the production example file:
+
+```bash
+cd prod-support
+cp .env.example .env
+```
+
+Update at least:
+
+```txt
 JWT_SECRET=<long-random-secret>
 ADMIN_ACCESS_PASSWORD=<admin-password>
-FRONTEND_ORIGIN=https://your-frontend.vercel.app
+FRONTEND_ORIGIN=https://your-domain.ntuee.org
 ```
 
-The backend also exposes a health endpoint at:
+Notes:
+
+- `MONGODB_URI` already defaults to the compose MongoDB service name
+- `AUTO_SEED_DATA=true` will seed reservation areas and opening hours only when those collections are empty
+- if you later need multiple allowed frontend origins, use `FRONTEND_ORIGINS` as a comma-separated list or wildcard pattern
+
+### 2. Create the Shared Nginx Network
+
+The compose file expects the same external Docker network used by Nginx Proxy Manager:
+
+```bash
+docker network create nginx
+```
+
+You only need to do this once on the server.
+
+### 3. Build and Start the Containers
+
+From the `prod-support` directory:
+
+```bash
+docker compose up -d --build
+```
+
+This starts:
+
+- `mks-reservation-web`
+- `mks-reservation-mongo`
+
+The web app listens on port `4000` inside the container and also publishes `4000:4000` on the host for debugging.
+
+### 4. Configure Nginx Proxy Manager
+
+Create a new Proxy Host with:
+
+- Domain Names: your final domain, for example `mks.ntuee.org`
+- Scheme: `http`
+- Forward Hostname / IP: `mks-reservation-web`
+- Forward Port: `4000`
+
+If the proxy host is on the same Docker network, Nginx Proxy Manager can reach the container by service/container name directly.
+
+### 5. Configure DNS
+
+In Cloudflare DNS, point your subdomain to the department server:
 
 ```txt
-/api/health
+Type: A
+Name: mks
+Content: <server IPv4>
 ```
 
-### 3. Deploy the Frontend to Vercel
+After DNS resolves correctly, the domain should reach Nginx Proxy Manager, which then forwards traffic to the app container.
 
-Create a Vercel project that uses the `frontend` directory as the project root.
+### 6. Enable HTTPS
 
-Required environment variable:
+After the HTTP proxy host works:
+
+1. Request an SSL certificate in Nginx Proxy Manager.
+2. Enable HTTPS for the proxy host.
+3. Keep `FRONTEND_ORIGIN` aligned with the final `https://...` domain.
+
+### 7. Useful Checks
+
+Container status:
+
+```bash
+docker compose ps
+docker compose logs -f mks-reservation-web
+docker compose logs -f mks-reservation-mongo
+```
+
+Health check:
 
 ```txt
-VITE_API_BASE_URL=https://your-backend.onrender.com
+https://your-domain.ntuee.org/api/health
 ```
 
-This repository includes `frontend/vercel.json` so browser refreshes and direct links in the React SPA rewrite to `index.html`.
+Expected response:
 
-### 4. Update CORS
-
-After the Vercel project has a stable production domain, set Render's:
-
-```txt
-FRONTEND_ORIGIN=https://your-frontend.vercel.app
+```json
+{ "ok": true }
 ```
 
-If you also want Vercel preview deployments to work against the same backend, you can provide a comma-separated list or a wildcard pattern such as:
+### Production Notes
 
-```txt
-FRONTEND_ORIGINS=https://your-frontend.vercel.app,https://*-your-team.vercel.app
-```
+- Same-origin requests are allowed automatically when the frontend is served by the same container as the API.
+- If you deploy a separate frontend later, set `FRONTEND_ORIGIN` or `FRONTEND_ORIGINS` explicitly.
+- The backend falls back to API-only mode if `frontend/dist` is not present.
+- The SPA router is supported in production, so browser refresh on nested routes still returns `index.html`.
 
 ## Account Requirements
 
