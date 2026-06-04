@@ -49,8 +49,12 @@ async function seedAreas() {
   await mongoose.disconnect();
 }
 
-seedAreas().catch(async (error) => {
-  console.error("Failed to seed areas", error);
-  await mongoose.disconnect();
-  process.exit(1);
-});
+module.exports = { areas, seedAreas };
+
+if (require.main === module) {
+  seedAreas().catch(async (error) => {
+    console.error("Failed to seed areas", error);
+    await mongoose.disconnect();
+    process.exit(1);
+  });
+}

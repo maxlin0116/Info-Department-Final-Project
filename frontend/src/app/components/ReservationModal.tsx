@@ -49,9 +49,35 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")
   : "";
 const BASE_SLOT_HEIGHT_PX = 32;
+const DEFAULT_BUSINESS_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
-function toIsoDateTime(date: string, time: string) {
-  return new Date(date + "T" + time + ":00").toISOString();
+function getBusinessTimezoneOffsetMinutes() {
+  const parsed = Number.parseInt(
+    import.meta.env.VITE_BUSINESS_TIMEZONE_OFFSET_MINUTES ?? String(DEFAULT_BUSINESS_TIMEZONE_OFFSET_MINUTES),
+    10
+  );
+
+  return Number.isFinite(parsed) ? parsed : DEFAULT_BUSINESS_TIMEZONE_OFFSET_MINUTES;
+}
+
+function parseBusinessDateTime(date: string, time: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+  const offsetMinutes = getBusinessTimezoneOffsetMinutes();
+
+  return new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0) - offsetMinutes * 60 * 1000);
+}
+
+function toBusinessIsoDateTime(date: string, time: string) {
+  return parseBusinessDateTime(date, time).toISOString();
+}
+
+function toBusinessDateKey(value: Date) {
+  const shifted = new Date(value.getTime() + getBusinessTimezoneOffsetMinutes() * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 async function readErrorMessage(response: Response) {
@@ -245,7 +271,7 @@ export function ReservationModal({
     }
 
     const now = new Date();
-    const isToday = new Date(selectedDateAvailability.date).toDateString() === now.toDateString();
+    const isToday = selectedDateAvailability.date === toBusinessDateKey(now);
 
     return selectedDateAvailability.slots
       .filter((slot) => {
@@ -254,7 +280,7 @@ export function ReservationModal({
         }
 
         if (isToday) {
-          const slotDateTime = new Date(`${selectedDateAvailability.date}T${slot.time}:00`);
+          const slotDateTime = parseBusinessDateTime(selectedDateAvailability.date, slot.time);
           return slotDateTime > now;
         }
 
@@ -364,8 +390,8 @@ export function ReservationModal({
         },
         body: JSON.stringify({
           areaId,
-          startTime: toIsoDateTime(date, startTime),
-          endTime: toIsoDateTime(date, endTime),
+          startTime: toBusinessIsoDateTime(date, startTime),
+          endTime: toBusinessIsoDateTime(date, endTime),
           participantCount: selectedPeople,
           purpose: purpose.trim() || `${resourceName} reservation`,
           plannedItems: parsePlannedItems(plannedItemsInput),
@@ -748,7 +774,7 @@ export function ReservationModal({
 
                         const isSelected =
                           date === day.date && startTime !== "" && endTime !== "" && selectedSlotTimes.has(slot.time);
-                        const slotDateTime = new Date(`${day.date}T${slotTime}:00`);
+                        const slotDateTime = parseBusinessDateTime(day.date, slotTime);
                         const isPast = slotDateTime < new Date();
                         const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople && !isPast;
                         const title = !slot.isOpen
