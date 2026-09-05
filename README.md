@@ -67,6 +67,9 @@ JWT_SECRET=<your jwt secret>
 ADMIN_ACCESS_PASSWORD=<your admin access password>
 RESERVATION_QUOTA_LIMIT=16
 FRONTEND_ORIGIN=http://localhost:5173
+MAIL_PROVIDER=resend
+RESEND_API_KEY=<your resend api key>
+EMAIL_API_TIMEOUT_MS=15000
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -147,6 +150,9 @@ JWT_SECRET=<long-random-secret>
 ADMIN_ACCESS_PASSWORD=<admin-password>
 RESERVATION_QUOTA_LIMIT=16
 FRONTEND_ORIGIN=https://your-domain.ntuee.org
+MAIL_PROVIDER=resend
+RESEND_API_KEY=<your resend api key>
+EMAIL_API_TIMEOUT_MS=15000
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -165,8 +171,9 @@ Notes:
 - `MONGODB_URI` already defaults to the compose MongoDB service name
 - `AUTO_SEED_DATA=true` will seed reservation areas and opening hours only when those collections are empty
 - if you later need multiple allowed frontend origins, use `FRONTEND_ORIGINS` as a comma-separated list or wildcard pattern
-- password reset email requires `SMTP_HOST` and `EMAIL_FROM`; `SMTP_USER` and `SMTP_PASS` are only needed when your SMTP server requires authentication
-- Render free web services cannot send outbound SMTP traffic on ports `25`, `465`, or `587`; use a paid Render instance or an email provider with an HTTPS API if password reset email must run on Render Free
+- password reset email supports `MAIL_PROVIDER=resend` with `RESEND_API_KEY`, or SMTP with `SMTP_HOST` and `EMAIL_FROM`
+- Render free web services cannot send outbound SMTP traffic on ports `25`, `465`, or `587`; set `MAIL_PROVIDER=resend` and use the Resend HTTPS API on Render Free
+- Resend's default `onboarding@resend.dev` sender is only for testing to your own Resend account email; verify your own domain in Resend before sending password reset emails to general users
 
 ### 2. Create the Shared Nginx Network
 
