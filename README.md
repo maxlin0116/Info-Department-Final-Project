@@ -72,6 +72,9 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
+SMTP_CONNECTION_TIMEOUT_MS=15000
+SMTP_GREETING_TIMEOUT_MS=10000
+SMTP_SOCKET_TIMEOUT_MS=20000
 EMAIL_FROM="MakerSpace <no-reply@example.com>"
 PASSWORD_RESET_URL_BASE=http://localhost:5173
 PASSWORD_RESET_TOKEN_TTL_MINUTES=15
@@ -149,6 +152,9 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
+SMTP_CONNECTION_TIMEOUT_MS=15000
+SMTP_GREETING_TIMEOUT_MS=10000
+SMTP_SOCKET_TIMEOUT_MS=20000
 EMAIL_FROM="MakerSpace <no-reply@your-domain.ntuee.org>"
 PASSWORD_RESET_URL_BASE=https://your-domain.ntuee.org
 PASSWORD_RESET_TOKEN_TTL_MINUTES=15
@@ -160,6 +166,7 @@ Notes:
 - `AUTO_SEED_DATA=true` will seed reservation areas and opening hours only when those collections are empty
 - if you later need multiple allowed frontend origins, use `FRONTEND_ORIGINS` as a comma-separated list or wildcard pattern
 - password reset email requires `SMTP_HOST` and `EMAIL_FROM`; `SMTP_USER` and `SMTP_PASS` are only needed when your SMTP server requires authentication
+- Render free web services cannot send outbound SMTP traffic on ports `25`, `465`, or `587`; use a paid Render instance or an email provider with an HTTPS API if password reset email must run on Render Free
 
 ### 2. Create the Shared Nginx Network
 

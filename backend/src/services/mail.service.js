@@ -20,6 +20,11 @@ function getSmtpPort() {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 587;
 }
 
+function getTimeoutEnv(name, fallbackMs) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackMs;
+}
+
 function getSecureFlag(port) {
   if (process.env.SMTP_SECURE !== undefined) {
     return process.env.SMTP_SECURE === "true";
@@ -48,6 +53,9 @@ function createTransporter() {
     port,
     secure: getSecureFlag(port),
     auth: user && pass ? { user, pass } : undefined,
+    connectionTimeout: getTimeoutEnv("SMTP_CONNECTION_TIMEOUT_MS", 15000),
+    greetingTimeout: getTimeoutEnv("SMTP_GREETING_TIMEOUT_MS", 10000),
+    socketTimeout: getTimeoutEnv("SMTP_SOCKET_TIMEOUT_MS", 20000),
   });
 }
 

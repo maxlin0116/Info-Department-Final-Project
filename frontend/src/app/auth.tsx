@@ -4,6 +4,7 @@ const STORAGE_KEY = "mks-auth";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "")
   : "";
+const PASSWORD_RESET_REQUEST_TIMEOUT_MS = 30000;
 
 export interface AuthUser {
   id: string;
@@ -162,6 +163,32 @@ function getEndpoint(path: string) {
   return API_BASE_URL ? API_BASE_URL + path : path;
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number
+) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Request timed out. Please try again later.");
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>(loadStoredAuth);
   const isAuthenticated = Boolean(authState.token && authState.user);
@@ -251,25 +278,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const requestPasswordReset = async ({ identifier }: RequestPasswordResetInput) => {
-    const response = await fetch(getEndpoint("/api/auth/password-reset/request"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      getEndpoint("/api/auth/password-reset/request"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ identifier }),
       },
-      body: JSON.stringify({ identifier }),
-    });
+      PASSWORD_RESET_REQUEST_TIMEOUT_MS
+    );
 
     await readApiPayload(response);
   };
 
   const resetPassword = async ({ token, newPassword }: ResetPasswordInput) => {
-    const response = await fetch(getEndpoint("/api/auth/password-reset/confirm"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      getEndpoint("/api/auth/password-reset/confirm"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token, newPassword }),
       },
-      body: JSON.stringify({ token, newPassword }),
-    });
+      PASSWORD_RESET_REQUEST_TIMEOUT_MS
+    );
 
     await readApiPayload(response);
   };
