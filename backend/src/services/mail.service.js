@@ -1,6 +1,9 @@
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 
 const RESEND_API_URL = "https://api.resend.com/emails";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
 function createError(statusCode, message) {
   const error = new Error(message);
@@ -27,9 +30,25 @@ function getTimeoutEnv(name, fallbackMs) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackMs;
 }
 
-function shouldUseResend() {
+function getMailProvider() {
   const provider = process.env.MAIL_PROVIDER?.trim().toLowerCase();
-  return provider === "resend" || Boolean(process.env.RESEND_API_KEY?.trim());
+  if (provider === "gmail" || provider === "gmail-api") {
+    return "gmail_api";
+  }
+
+  if (provider) {
+    return provider;
+  }
+
+  if (process.env.GMAIL_REFRESH_TOKEN?.trim()) {
+    return "gmail_api";
+  }
+
+  if (process.env.RESEND_API_KEY?.trim()) {
+    return "resend";
+  }
+
+  return "smtp";
 }
 
 function getSecureFlag(port) {
@@ -47,6 +66,62 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function sanitizeHeader(value) {
+  return String(value).replace(/[\r\n]+/g, " ").trim();
+}
+
+function encodeHeader(value) {
+  const sanitized = sanitizeHeader(value);
+  return /^[\x00-\x7F]*$/.test(sanitized)
+    ? sanitized
+    : `=?UTF-8?B?${Buffer.from(sanitized, "utf8").toString("base64")}?=`;
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function normalizeMimeBody(value) {
+  return String(value ?? "").replace(/\r?\n/g, "\r\n");
+}
+
+function createBoundary() {
+  if (typeof crypto.randomUUID === "function") {
+    return `mks-${crypto.randomUUID()}`;
+  }
+
+  return `mks-${crypto.randomBytes(16).toString("hex")}`;
+}
+
+function createMimeMessage({ from, to, subject, text, html }) {
+  const boundary = createBoundary();
+
+  return [
+    `From: ${sanitizeHeader(from)}`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${encodeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    normalizeMimeBody(text),
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    normalizeMimeBody(html),
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
 }
 
 function createTransporter() {
@@ -143,6 +218,36 @@ async function readResendError(response) {
   return `Resend email API failed with status ${response.status}`;
 }
 
+async function readApiError(response, fallback) {
+  const text = await response.text();
+  if (!text) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(text);
+    if (payload.error && typeof payload.error.message === "string") {
+      return payload.error.message;
+    }
+
+    if (typeof payload.error_description === "string") {
+      return payload.error_description;
+    }
+
+    if (typeof payload.error === "string") {
+      return payload.error;
+    }
+
+    if (typeof payload.message === "string") {
+      return payload.message;
+    }
+  } catch (_error) {
+    return text;
+  }
+
+  return fallback;
+}
+
 async function sendWithResend({ to, subject, text, html }) {
   const apiKey = getRequiredEnv("RESEND_API_KEY");
   const from = getRequiredEnv("EMAIL_FROM");
@@ -170,6 +275,78 @@ async function sendWithResend({ to, subject, text, html }) {
   }
 }
 
+async function getGmailAccessToken() {
+  const params = new URLSearchParams({
+    client_id: getRequiredEnv("GMAIL_CLIENT_ID"),
+    client_secret: getRequiredEnv("GMAIL_CLIENT_SECRET"),
+    refresh_token: getRequiredEnv("GMAIL_REFRESH_TOKEN"),
+    grant_type: "refresh_token",
+  });
+
+  const response = await fetchWithTimeout(
+    GOOGLE_TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    },
+    getTimeoutEnv("EMAIL_API_TIMEOUT_MS", 15000)
+  );
+
+  if (!response.ok) {
+    throw createError(
+      response.status >= 500 ? 502 : 400,
+      await readApiError(response, `Google OAuth token request failed with status ${response.status}`)
+    );
+  }
+
+  const payload = await response.json();
+  if (!payload.access_token) {
+    throw createError(502, "Google OAuth token response did not include an access token");
+  }
+
+  return payload.access_token;
+}
+
+function getGmailFromHeader() {
+  return process.env.EMAIL_FROM?.trim() || getRequiredEnv("GMAIL_SENDER_EMAIL");
+}
+
+async function sendWithGmailApi({ to, subject, text, html }) {
+  const accessToken = await getGmailAccessToken();
+  const raw = encodeBase64Url(
+    createMimeMessage({
+      from: getGmailFromHeader(),
+      to,
+      subject,
+      text,
+      html,
+    })
+  );
+
+  const response = await fetchWithTimeout(
+    GMAIL_SEND_URL,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ raw }),
+    },
+    getTimeoutEnv("EMAIL_API_TIMEOUT_MS", 15000)
+  );
+
+  if (!response.ok) {
+    throw createError(
+      response.status >= 500 ? 502 : 400,
+      await readApiError(response, `Gmail API send request failed with status ${response.status}`)
+    );
+  }
+}
+
 async function sendWithSmtp({ to, subject, text, html }) {
   const transporter = createTransporter();
   const from = getRequiredEnv("EMAIL_FROM");
@@ -184,13 +361,29 @@ async function sendWithSmtp({ to, subject, text, html }) {
 }
 
 exports.assertMailConfigured = () => {
-  if (shouldUseResend()) {
+  const provider = getMailProvider();
+
+  if (provider === "resend") {
     getRequiredEnv("RESEND_API_KEY");
-  } else {
-    getRequiredEnv("SMTP_HOST");
+    getRequiredEnv("EMAIL_FROM");
+    return;
   }
 
-  getRequiredEnv("EMAIL_FROM");
+  if (provider === "gmail_api") {
+    getRequiredEnv("GMAIL_CLIENT_ID");
+    getRequiredEnv("GMAIL_CLIENT_SECRET");
+    getRequiredEnv("GMAIL_REFRESH_TOKEN");
+    getRequiredEnv("GMAIL_SENDER_EMAIL");
+    return;
+  }
+
+  if (provider === "smtp") {
+    getRequiredEnv("SMTP_HOST");
+    getRequiredEnv("EMAIL_FROM");
+    return;
+  }
+
+  throw createError(500, `Unsupported MAIL_PROVIDER: ${provider}`);
 };
 
 exports.sendPasswordResetEmail = async ({ to, name, resetUrl, expiresMinutes }) => {
@@ -205,10 +398,22 @@ exports.sendPasswordResetEmail = async ({ to, name, resetUrl, expiresMinutes }) 
     html,
   };
 
-  if (shouldUseResend()) {
+  const provider = getMailProvider();
+
+  if (provider === "resend") {
     await sendWithResend(payload);
     return;
   }
 
-  await sendWithSmtp(payload);
+  if (provider === "gmail_api") {
+    await sendWithGmailApi(payload);
+    return;
+  }
+
+  if (provider === "smtp") {
+    await sendWithSmtp(payload);
+    return;
+  }
+
+  throw createError(500, `Unsupported MAIL_PROVIDER: ${provider}`);
 };

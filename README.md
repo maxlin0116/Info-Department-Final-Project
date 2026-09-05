@@ -67,8 +67,12 @@ JWT_SECRET=<your jwt secret>
 ADMIN_ACCESS_PASSWORD=<your admin access password>
 RESERVATION_QUOTA_LIMIT=16
 FRONTEND_ORIGIN=http://localhost:5173
-MAIL_PROVIDER=resend
-RESEND_API_KEY=<your resend api key>
+MAIL_PROVIDER=gmail_api
+GMAIL_CLIENT_ID=<your google oauth client id>
+GMAIL_CLIENT_SECRET=<your google oauth client secret>
+GMAIL_REFRESH_TOKEN=<your google oauth refresh token>
+GMAIL_SENDER_EMAIL=<your gmail address>
+RESEND_API_KEY=<optional resend api key>
 EMAIL_API_TIMEOUT_MS=15000
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
@@ -150,8 +154,12 @@ JWT_SECRET=<long-random-secret>
 ADMIN_ACCESS_PASSWORD=<admin-password>
 RESERVATION_QUOTA_LIMIT=16
 FRONTEND_ORIGIN=https://your-domain.ntuee.org
-MAIL_PROVIDER=resend
-RESEND_API_KEY=<your resend api key>
+MAIL_PROVIDER=gmail_api
+GMAIL_CLIENT_ID=<your google oauth client id>
+GMAIL_CLIENT_SECRET=<your google oauth client secret>
+GMAIL_REFRESH_TOKEN=<your google oauth refresh token>
+GMAIL_SENDER_EMAIL=<your gmail address>
+RESEND_API_KEY=<optional resend api key>
 EMAIL_API_TIMEOUT_MS=15000
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
@@ -171,9 +179,10 @@ Notes:
 - `MONGODB_URI` already defaults to the compose MongoDB service name
 - `AUTO_SEED_DATA=true` will seed reservation areas and opening hours only when those collections are empty
 - if you later need multiple allowed frontend origins, use `FRONTEND_ORIGINS` as a comma-separated list or wildcard pattern
-- password reset email supports `MAIL_PROVIDER=resend` with `RESEND_API_KEY`, or SMTP with `SMTP_HOST` and `EMAIL_FROM`
-- Render free web services cannot send outbound SMTP traffic on ports `25`, `465`, or `587`; set `MAIL_PROVIDER=resend` and use the Resend HTTPS API on Render Free
+- password reset email supports `MAIL_PROVIDER=gmail_api`, `MAIL_PROVIDER=resend`, or SMTP with `SMTP_HOST` and `EMAIL_FROM`
+- Render free web services cannot send outbound SMTP traffic on ports `25`, `465`, or `587`; set `MAIL_PROVIDER=gmail_api` or `MAIL_PROVIDER=resend` to use an HTTPS email API on Render Free
 - Resend's default `onboarding@resend.dev` sender is only for testing to your own Resend account email; verify your own domain in Resend before sending password reset emails to general users
+- Gmail API does not require a custom domain, but it sends from the Gmail account that granted the refresh token and is subject to Gmail sending limits
 
 ### 2. Create the Shared Nginx Network
 
