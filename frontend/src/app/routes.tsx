@@ -7,6 +7,7 @@ import { AdminReservations } from "./components/AdminReservations";
 import { AccountSettings } from "./components/AccountSettings";
 import { ForgotPassword } from "./components/ForgotPassword";
 import { ResetPassword } from "./components/ResetPassword";
+import { PrivacyPolicy } from "./components/PrivacyPolicy";
 
 export const router = createBrowserRouter([
   {
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: "register", Component: Register },
       { path: "forgot-password", Component: ForgotPassword },
       { path: "reset-password", Component: ResetPassword },
+      { path: "privacy", Component: PrivacyPolicy },
     ],
   },
 ]);

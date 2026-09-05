@@ -10,7 +10,8 @@ export function Layout() {
     location.pathname === "/login" ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
-    location.pathname === "/reset-password";
+    location.pathname === "/reset-password" ||
+    location.pathname === "/privacy";
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -96,6 +97,11 @@ export function Layout() {
       >
         <Outlet />
       </motion.main>
+      <footer className="border-t border-slate-900 px-4 py-5 text-center text-xs text-slate-500">
+        <Link to="/privacy" className="hover:text-emerald-300 transition-colors">
+          Privacy Policy
+        </Link>
+      </footer>
     </div>
   );
 }

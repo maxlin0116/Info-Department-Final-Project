@@ -135,6 +135,11 @@ export function Login() {
               Sign up
             </Link>
           </div>
+          <div className="mt-3 text-center text-xs text-slate-500">
+            <Link to="/privacy" className="hover:text-emerald-300 transition-colors">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </div>
