@@ -1,12 +1,16 @@
 import { Outlet, Link, useLocation } from "react-router";
-import { Cpu } from "lucide-react";
+import { Cpu, KeyRound } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
 
 export function Layout() {
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
-  const isAuthPage = location.pathname === "/login" || location.pathname === "/register";
+  const isAuthPage =
+    location.pathname === "/login" ||
+    location.pathname === "/register" ||
+    location.pathname === "/forgot-password" ||
+    location.pathname === "/reset-password";
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -47,6 +51,13 @@ export function Layout() {
                       <div className="text-xs font-mono font-bold text-slate-100 uppercase">{user.name}</div>
                       <div className="text-[10px] font-mono text-slate-500">ID:{user.studentId}</div>
                     </div>
+                    <Link
+                      to="/account"
+                      className="px-3 py-2 text-xs font-mono font-medium text-slate-200 bg-slate-900 border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      ACCOUNT
+                    </Link>
                     <button
                       type="button"
                       onClick={logout}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, LogIn } from "lucide-react";
+import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, Gauge, LogIn } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
 
@@ -10,7 +10,16 @@ interface ReservationModalProps {
   areaId: string | null;
   resourceName: string;
   maxCapacity: number;
+  quota?: ReservationQuota | null;
   onReservationCreated?: () => void;
+}
+
+interface ReservationQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+  slotMinutes: number;
+  activeReservationCount: number;
 }
 
 interface AvailabilitySlot {
@@ -50,6 +59,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   : "";
 const BASE_SLOT_HEIGHT_PX = 32;
 const DEFAULT_BUSINESS_TIMEZONE_OFFSET_MINUTES = 8 * 60;
+const DEFAULT_QUOTA_SLOT_MINUTES = 30;
 
 function getBusinessTimezoneOffsetMinutes() {
   const parsed = Number.parseInt(
@@ -116,6 +126,19 @@ function getDurationMinutes(startTime: string, endTime: string) {
   return endHours * 60 + endMinutes - (startHours * 60 + startMinutes);
 }
 
+function getQuotaCost(startTime: string, endTime: string, participantCount: number, slotMinutes: number) {
+  if (!startTime || !endTime || slotMinutes <= 0) {
+    return 0;
+  }
+
+  const durationMinutes = getDurationMinutes(startTime, endTime);
+  if (durationMinutes <= 0) {
+    return 0;
+  }
+
+  return Math.ceil(durationMinutes / slotMinutes) * participantCount;
+}
+
 function formatSlotLabel(startTime: string, endTime: string) {
   return `${startTime}-${endTime}`;
 }
@@ -160,6 +183,7 @@ export function ReservationModal({
   areaId,
   resourceName,
   maxCapacity,
+  quota,
   onReservationCreated,
 }: ReservationModalProps) {
   const navigate = useNavigate();
@@ -181,6 +205,7 @@ export function ReservationModal({
 
   const effectiveMaxCapacity = availability?.area.maxCapacity ?? maxCapacity;
   const selectedPeople = Math.max(1, Number.parseInt(people, 10) || 1);
+  const quotaSlotMinutes = quota?.slotMinutes ?? DEFAULT_QUOTA_SLOT_MINUTES;
   const gridRows = useMemo(() => {
     const slots = availability?.dates.flatMap((entry) => entry.slots) ?? [];
     const rowMap = new Map<string, { time: string; endTime: string }>();
@@ -364,6 +389,22 @@ export function ReservationModal({
     return null;
   }, [selectedDateAvailability, startTime, endTime, selectedPeople, selectedSlots]);
 
+  const selectedQuotaCost = useMemo(() => {
+    return getQuotaCost(startTime, endTime, selectedPeople, quotaSlotMinutes);
+  }, [startTime, endTime, selectedPeople, quotaSlotMinutes]);
+
+  const quotaIssue = useMemo(() => {
+    if (!quota || selectedQuotaCost === 0) {
+      return null;
+    }
+
+    if (selectedQuotaCost > quota.remaining) {
+      return `This reservation uses ${selectedQuotaCost} quota point(s), but only ${quota.remaining} remain.`;
+    }
+
+    return null;
+  }, [quota, selectedQuotaCost]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -374,6 +415,11 @@ export function ReservationModal({
 
     if (!areaId || !date || !startTime || !endTime) {
       setError("Please choose a valid reservation time range.");
+      return;
+    }
+
+    if (quotaIssue) {
+      setError(quotaIssue);
       return;
     }
 
@@ -454,7 +500,14 @@ export function ReservationModal({
   };
 
   const submitDisabled =
-    !isAuthenticated || loading || submitting || !date || !startTime || !endTime || Boolean(selectionCapacityIssue);
+    !isAuthenticated ||
+    loading ||
+    submitting ||
+    !date ||
+    !startTime ||
+    !endTime ||
+    Boolean(selectionCapacityIssue) ||
+    Boolean(quotaIssue);
 
   return (
     <AnimatePresence>
@@ -537,6 +590,32 @@ export function ReservationModal({
                         ERROR: {error}
                       </motion.div>
                     )}
+
+                    {isAuthenticated && quota ? (
+                      <div
+                        className={`rounded-lg border px-4 py-3 text-xs font-mono ${
+                          quotaIssue
+                            ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                            : "border-emerald-500/20 bg-emerald-500/10 text-emerald-100"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="inline-flex items-center gap-2 uppercase tracking-widest">
+                            <Gauge className="w-3.5 h-3.5" />
+                            RSVN_QUOTA
+                          </span>
+                          <span className="shrink-0">
+                            {quota.used}/{quota.limit}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-[11px] text-slate-400">
+                          {selectedQuotaCost > 0
+                            ? `REQUEST_COST: ${selectedQuotaCost} · ${quota.remaining}_LEFT`
+                            : `${quota.remaining}_LEFT · ${quota.slotMinutes}MIN/PAX`}
+                        </div>
+                        {quotaIssue ? <div className="mt-2 text-[11px] text-rose-200">{quotaIssue}</div> : null}
+                      </div>
+                    ) : null}
 
                     <div className="space-y-1.5">
                       <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">

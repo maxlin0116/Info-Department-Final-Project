@@ -30,6 +30,15 @@ const userSchema = new mongoose.Schema(
       trim: true,
       lowercase: true
     },
+    passwordResetTokenHash: {
+      type: String,
+      select: false,
+      index: true
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      select: false
+    },
     role: {
       type: String,
       enum: ["admin", "user"], // Define allowed roles for users

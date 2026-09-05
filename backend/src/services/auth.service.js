@@ -1,9 +1,13 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
+const mailService = require("./mail.service");
 
 const JWT_EXPIRES_IN = "7d";
 const STUDENT_ID_REGEX = /^[a-zA-Z]\d{8}$/;
+const PASSWORD_RESET_TOKEN_BYTES = 32;
+const DEFAULT_PASSWORD_RESET_TOKEN_TTL_MINUTES = 15;
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -17,10 +21,33 @@ function getAdminAccessPassword() {
   return process.env.ADMIN_ACCESS_PASSWORD?.trim() || "";
 }
 
+function getPasswordResetUrlBase() {
+  const configuredBase =
+    process.env.PASSWORD_RESET_URL_BASE?.trim() ||
+    process.env.FRONTEND_ORIGIN?.trim() ||
+    process.env.FRONTEND_ORIGINS?.split(",")[0]?.trim() ||
+    "http://localhost:5173";
+
+  return configuredBase.replace(/\/$/, "");
+}
+
+function getPasswordResetTokenTtlMinutes() {
+  const parsed = Number.parseInt(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_PASSWORD_RESET_TOKEN_TTL_MINUTES;
+}
+
 function createError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function hashResetToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function createPasswordResetUrl(token) {
+  return `${getPasswordResetUrlBase()}/reset-password?token=${encodeURIComponent(token)}`;
 }
 
 function serializeUser(user, roleOverride) {
@@ -136,4 +163,92 @@ exports.loginUser = async (studentId, password, options = {}) => {
     token: issueToken(user, sessionRole),
     user: serializeUser(user, sessionRole),
   };
+};
+
+exports.changePassword = async (userId, currentPassword, newPassword) => {
+  if (!currentPassword || typeof newPassword !== "string" || !newPassword.trim()) {
+    throw createError(400, "Please provide current password and new password");
+  }
+
+  if (currentPassword === newPassword) {
+    throw createError(400, "New password must be different from the current password");
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw createError(404, "User not found");
+  }
+
+  const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isPasswordValid) {
+    throw createError(401, "Current password is incorrect");
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  await user.save();
+
+  return serializeUser(user);
+};
+
+exports.requestPasswordReset = async (identifier) => {
+  const normalizedIdentifier = identifier?.trim();
+  if (!normalizedIdentifier) {
+    throw createError(400, "Please provide student ID or email");
+  }
+
+  mailService.assertMailConfigured();
+
+  const userQuery = normalizedIdentifier.includes("@")
+    ? { personalEmail: normalizedIdentifier.toLowerCase() }
+    : { studentId: normalizedIdentifier };
+  const user = await User.findOne(userQuery);
+
+  if (!user) {
+    return;
+  }
+
+  const token = crypto.randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString("hex");
+  const expiresMinutes = getPasswordResetTokenTtlMinutes();
+
+  user.passwordResetTokenHash = hashResetToken(token);
+  user.passwordResetExpiresAt = new Date(Date.now() + expiresMinutes * 60 * 1000);
+  await user.save();
+
+  try {
+    await mailService.sendPasswordResetEmail({
+      to: user.personalEmail,
+      name: user.name,
+      resetUrl: createPasswordResetUrl(token),
+      expiresMinutes,
+    });
+  } catch (error) {
+    user.passwordResetTokenHash = undefined;
+    user.passwordResetExpiresAt = undefined;
+    await user.save();
+    throw error;
+  }
+};
+
+exports.resetPasswordWithToken = async (token, newPassword) => {
+  const normalizedToken = token?.trim();
+  if (!normalizedToken || typeof newPassword !== "string" || !newPassword.trim()) {
+    throw createError(400, "Please provide reset token and new password");
+  }
+
+  const tokenHash = hashResetToken(normalizedToken);
+  const user = await User.findOne({
+    passwordResetTokenHash: tokenHash,
+    passwordResetExpiresAt: { $gt: new Date() },
+  }).select("+passwordResetTokenHash +passwordResetExpiresAt");
+
+  if (!user) {
+    throw createError(400, "Password reset link is invalid or expired");
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  user.passwordResetTokenHash = undefined;
+  user.passwordResetExpiresAt = undefined;
+  await user.save();
+
+  return serializeUser(user);
 };

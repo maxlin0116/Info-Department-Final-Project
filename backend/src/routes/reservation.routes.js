@@ -6,6 +6,7 @@ const { authenticate } = require("../middlewares/auth.middleware");
 router.get("/", authenticate, reservationController.getAllReservations);
 router.get("/current", authenticate, reservationController.getCurrentReservations);
 router.get("/my", authenticate, reservationController.getMyReservations);
+router.get("/quota", authenticate, reservationController.getMyReservationQuota);
 router.post("/", authenticate, reservationController.createReservation);
 router.patch("/:id", authenticate, reservationController.updateReservation);
 router.delete("/:id", authenticate, reservationController.cancelReservation);

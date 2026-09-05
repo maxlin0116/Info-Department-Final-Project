@@ -34,12 +34,29 @@ interface RegisterInput {
   password: string;
 }
 
+interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+interface RequestPasswordResetInput {
+  identifier: string;
+}
+
+interface ResetPasswordInput {
+  token: string;
+  newPassword: string;
+}
+
 interface AuthContextValue {
   token: string | null;
   user: AuthUser | null;
   isAuthenticated: boolean;
   login: (input: LoginInput) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  changePassword: (input: ChangePasswordInput) => Promise<void>;
+  requestPasswordReset: (input: RequestPasswordResetInput) => Promise<void>;
+  resetPassword: (input: ResetPasswordInput) => Promise<void>;
   logout: () => void;
 }
 
@@ -201,6 +218,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     persistAuth(nextState);
   };
 
+  const changePassword = async ({ currentPassword, newPassword }: ChangePasswordInput) => {
+    if (!authState.token) {
+      throw new Error("Please log in before changing your password");
+    }
+
+    const response = await fetch(getEndpoint("/api/auth/password"), {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + authState.token,
+      },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword,
+      }),
+    });
+
+    const payload = (await readApiPayload(response)) as {
+      user?: unknown;
+    };
+
+    if (payload.user) {
+      const nextState = {
+        token: authState.token,
+        user: normalizeUser(payload.user),
+      };
+
+      setAuthState(nextState);
+      persistAuth(nextState);
+    }
+  };
+
+  const requestPasswordReset = async ({ identifier }: RequestPasswordResetInput) => {
+    const response = await fetch(getEndpoint("/api/auth/password-reset/request"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ identifier }),
+    });
+
+    await readApiPayload(response);
+  };
+
+  const resetPassword = async ({ token, newPassword }: ResetPasswordInput) => {
+    const response = await fetch(getEndpoint("/api/auth/password-reset/confirm"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token, newPassword }),
+    });
+
+    await readApiPayload(response);
+  };
+
   const logout = () => {
     const nextState = { token: null, user: null };
     setAuthState(nextState);
@@ -240,6 +313,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         login,
         register,
+        changePassword,
+        requestPasswordReset,
+        resetPassword,
         logout,
       }}
     >

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import {
   AlertCircle,
   CalendarClock,
+  Gauge,
   Hammer,
   Plus,
   Printer,
@@ -71,6 +72,15 @@ interface ReservationItem {
 
 interface MyReservationsResponse {
   reservations: ReservationItem[];
+  quota?: ReservationQuota;
+}
+
+interface ReservationQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+  slotMinutes: number;
+  activeReservationCount: number;
 }
 
 interface AreaMeta {
@@ -375,6 +385,7 @@ export function Dashboard() {
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
   const [areas, setAreas] = useState<AreaStatusItem[]>([]);
   const [myReservations, setMyReservations] = useState<ReservationItem[]>([]);
+  const [reservationQuota, setReservationQuota] = useState<ReservationQuota | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingReservations, setLoadingReservations] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -404,6 +415,14 @@ export function Dashboard() {
       r.status !== "rejected"
     );
   }, [enrichedReservations]);
+
+  const quotaPercent = useMemo(() => {
+    if (!reservationQuota || reservationQuota.limit <= 0) {
+      return 0;
+    }
+
+    return Math.min(100, Math.round((reservationQuota.used / reservationQuota.limit) * 100));
+  }, [reservationQuota]);
 
   const handleReserve = (area: AreaSummary) => {
     setSelectedArea(area);
@@ -484,6 +503,7 @@ export function Dashboard() {
   useEffect(() => {
     if (!isAuthenticated || !token) {
       setMyReservations([]);
+      setReservationQuota(null);
       setReservationsError(null);
       setLoadingReservations(false);
       return;
@@ -515,6 +535,7 @@ export function Dashboard() {
 
         if (!cancelled) {
           setMyReservations(payload.reservations);
+          setReservationQuota(payload.quota ?? null);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -627,7 +648,29 @@ export function Dashboard() {
             <h2 className="text-lg font-semibold text-slate-100 font-mono">My Reservations</h2>
             <p className="text-sm text-slate-400 mt-1 font-sans">Track your active terminal sessions.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            {reservationQuota ? (
+              <div className="min-w-[190px] rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+                <div className="flex items-center justify-between gap-3 text-[10px] font-mono uppercase tracking-widest">
+                  <span className="inline-flex items-center gap-1.5 text-slate-500">
+                    <Gauge className="w-3.5 h-3.5 text-emerald-400" />
+                    Quota
+                  </span>
+                  <span className={reservationQuota.remaining === 0 ? "text-rose-300" : "text-slate-300"}>
+                    {reservationQuota.used}/{reservationQuota.limit}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className={`h-full rounded-full ${reservationQuota.remaining === 0 ? "bg-rose-400" : "bg-emerald-400"}`}
+                    style={{ width: `${quotaPercent}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[9px] text-slate-600 font-mono">
+                  {reservationQuota.remaining}_LEFT · {reservationQuota.slotMinutes}MIN/PAX
+                </div>
+              </div>
+            ) : null}
             <button
               onClick={openHistory}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-slate-100 hover:border-slate-500 transition-all cursor-pointer"
@@ -762,6 +805,7 @@ export function Dashboard() {
         areaId={selectedArea?.id ?? null}
         resourceName={selectedArea?.name ?? ""}
         maxCapacity={selectedArea?.maxCapacity ?? 1}
+        quota={reservationQuota}
         onReservationCreated={() => setRefreshNonce((current) => current + 1)}
       />
     </>

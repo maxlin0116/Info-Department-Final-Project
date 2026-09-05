@@ -58,7 +58,15 @@ export function Login() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-300">Password</label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-medium text-slate-300">Password</label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 required

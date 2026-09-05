@@ -4,6 +4,9 @@ import { Dashboard } from "./components/Dashboard";
 import { Login } from "./components/Login";
 import { Register } from "./components/Register";
 import { AdminReservations } from "./components/AdminReservations";
+import { AccountSettings } from "./components/AccountSettings";
+import { ForgotPassword } from "./components/ForgotPassword";
+import { ResetPassword } from "./components/ResetPassword";
 
 export const router = createBrowserRouter([
   {
@@ -12,8 +15,11 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: Dashboard },
       { path: "admin/reservations", Component: AdminReservations },
+      { path: "account", Component: AccountSettings },
       { path: "login", Component: Login },
       { path: "register", Component: Register },
+      { path: "forgot-password", Component: ForgotPassword },
+      { path: "reset-password", Component: ResetPassword },
     ],
   },
 ]);

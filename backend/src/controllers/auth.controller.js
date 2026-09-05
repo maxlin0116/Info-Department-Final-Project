@@ -71,3 +71,44 @@ exports.getMe = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.changePassword = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const currentPassword = req.body.currentPassword ?? req.body.current_password;
+    const newPassword = req.body.newPassword ?? req.body.new_password;
+
+    const user = await authService.changePassword(req.user.id, currentPassword, newPassword);
+    res.status(200).json({ message: "Password updated successfully", user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.requestPasswordReset = async (req, res, next) => {
+  try {
+    const identifier = req.body.identifier ?? req.body.studentId ?? req.body.student_id ?? req.body.email;
+    await authService.requestPasswordReset(identifier);
+
+    res.status(200).json({
+      message: "If the account exists, a password reset email has been sent.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const token = req.body.token;
+    const newPassword = req.body.newPassword ?? req.body.new_password;
+    const user = await authService.resetPasswordWithToken(token, newPassword);
+
+    res.status(200).json({ message: "Password reset successfully", user });
+  } catch (error) {
+    next(error);
+  }
+};

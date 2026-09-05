@@ -15,11 +15,24 @@ const VALID_TIME_BLOCKS = [
 ];
 
 const ACTIVE_STATUSES = ["approved", "pending"];
+const QUOTA_SLOT_MINUTES = 30;
+const DEFAULT_RESERVATION_QUOTA_LIMIT = 16;
 
 function createError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function getReservationQuotaLimit() {
+  const parsed = Number.parseInt(process.env.RESERVATION_QUOTA_LIMIT ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_RESERVATION_QUOTA_LIMIT;
+}
+
+function calculateReservationQuotaCost(startTime, endTime, participantCount) {
+  const durationMinutes = Math.max(0, endTime.getTime() - startTime.getTime()) / (1000 * 60);
+  const slotCount = Math.ceil(durationMinutes / QUOTA_SLOT_MINUTES);
+  return Math.max(0, slotCount * participantCount);
 }
 
 function normalizeDate(value, fieldName) {
@@ -122,6 +135,62 @@ async function getOverlappingParticipantCount(areaId, startTime, endTime, exclud
   return overlappingReservations.reduce((total, reservation) => total + reservation.participantCount, 0);
 }
 
+async function getQuotaUsageForUser(userId, currentTime = new Date(), excludeReservationId) {
+  const query = {
+    user: userId,
+    status: { $in: ACTIVE_STATUSES },
+    endTime: { $gt: currentTime },
+  };
+
+  if (excludeReservationId) {
+    query._id = { $ne: excludeReservationId };
+  }
+
+  const reservations = await Reservation.find(query)
+    .select("startTime endTime participantCount")
+    .lean();
+  const used = reservations.reduce((total, reservation) => {
+    return total + calculateReservationQuotaCost(
+      new Date(reservation.startTime),
+      new Date(reservation.endTime),
+      reservation.participantCount || 0
+    );
+  }, 0);
+  const limit = getReservationQuotaLimit();
+
+  return {
+    limit,
+    used,
+    remaining: Math.max(limit - used, 0),
+    slotMinutes: QUOTA_SLOT_MINUTES,
+    activeReservationCount: reservations.length,
+  };
+}
+
+async function validateReservationQuota(userId, startTime, endTime, participantCount, excludeReservationId) {
+  const quota = await getQuotaUsageForUser(userId, new Date(), excludeReservationId);
+  const requested = calculateReservationQuotaCost(startTime, endTime, participantCount);
+  const projectedUsed = quota.used + requested;
+
+  if (projectedUsed > quota.limit) {
+    throw createError(
+      409,
+      "Reservation failed. This reservation uses " +
+        requested +
+        " quota point(s), but only " +
+        quota.remaining +
+        " quota point(s) remain."
+    );
+  }
+
+  return {
+    ...quota,
+    requested,
+    projectedUsed,
+    projectedRemaining: Math.max(quota.limit - projectedUsed, 0),
+  };
+}
+
 async function validateReservationWindow(area, startTime, endTime, participantCount, excludeReservationId) {
   if (!area) {
     throw createError(404, "Requested reservation area not found");
@@ -189,6 +258,10 @@ exports.getUserReservations = async (userId) => {
   return reservations.map(serializeReservation);
 };
 
+exports.getUserQuota = async (userId) => {
+  return getQuotaUsageForUser(userId);
+};
+
 exports.createReservation = async (user, data) => {
   const areaId = data.areaId;
   const startTime = normalizeDate(data.startTime, "startTime");
@@ -205,6 +278,7 @@ exports.createReservation = async (user, data) => {
 
   const area = await Area.findById(areaId);
   await validateReservationWindow(area, startTime, endTime, participantCount, null);
+  await validateReservationQuota(user.id, startTime, endTime, participantCount, null);
 
   const reservation = await Reservation.create({
     user: user.id,
@@ -252,6 +326,10 @@ exports.updateReservation = async (user, reservationId, updateData) => {
     : reservation.participantCount;
 
   await validateReservationWindow(reservation.area, nextStartTime, nextEndTime, nextParticipantCount, reservation._id);
+
+  if (ACTIVE_STATUSES.includes(reservation.status)) {
+    await validateReservationQuota(String(reservation.user), nextStartTime, nextEndTime, nextParticipantCount, reservation._id);
+  }
 
   reservation.startTime = nextStartTime;
   reservation.endTime = nextEndTime;

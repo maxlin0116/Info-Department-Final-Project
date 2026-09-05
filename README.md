@@ -65,7 +65,16 @@ PORT=8000
 MONGODB_URI=<your mongodb connection string>
 JWT_SECRET=<your jwt secret>
 ADMIN_ACCESS_PASSWORD=<your admin access password>
+RESERVATION_QUOTA_LIMIT=16
 FRONTEND_ORIGIN=http://localhost:5173
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+EMAIL_FROM="MakerSpace <no-reply@example.com>"
+PASSWORD_RESET_URL_BASE=http://localhost:5173
+PASSWORD_RESET_TOKEN_TTL_MINUTES=15
 ```
 
 2. Install dependencies and start the API:
@@ -133,7 +142,16 @@ Update at least:
 ```txt
 JWT_SECRET=<long-random-secret>
 ADMIN_ACCESS_PASSWORD=<admin-password>
+RESERVATION_QUOTA_LIMIT=16
 FRONTEND_ORIGIN=https://your-domain.ntuee.org
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+EMAIL_FROM="MakerSpace <no-reply@your-domain.ntuee.org>"
+PASSWORD_RESET_URL_BASE=https://your-domain.ntuee.org
+PASSWORD_RESET_TOKEN_TTL_MINUTES=15
 ```
 
 Notes:
@@ -141,6 +159,7 @@ Notes:
 - `MONGODB_URI` already defaults to the compose MongoDB service name
 - `AUTO_SEED_DATA=true` will seed reservation areas and opening hours only when those collections are empty
 - if you later need multiple allowed frontend origins, use `FRONTEND_ORIGINS` as a comma-separated list or wildcard pattern
+- password reset email requires `SMTP_HOST` and `EMAIL_FROM`; `SMTP_USER` and `SMTP_PASS` are only needed when your SMTP server requires authentication
 
 ### 2. Create the Shared Nginx Network
 
@@ -319,6 +338,8 @@ Example `plannedItems` data:
 - The Soldering Table has 8 available seats.
 - The 3DP Area should show whether there are active printing reservations.
 - New reservations are created as `pending` and still count toward capacity.
+- Pending and approved future reservations also count toward each user's reservation quota.
+- Each 30-minute time slot costs 1 quota point per participant, controlled by `RESERVATION_QUOTA_LIMIT`.
 - Users cannot create reservations for past time slots.
 - Reservation availability follows the configured opening-hour blocks and break periods.
 - Users can cancel their own reservations no later than 6 hours before the reservation start time.
@@ -490,6 +511,9 @@ POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/logout
 GET  /api/auth/me
+PATCH /api/auth/password
+POST /api/auth/password-reset/request
+POST /api/auth/password-reset/confirm
 ```
 
 The current implementation does **not** auto-create user accounts during the reservation flow. Registration must be completed first.
@@ -511,6 +535,7 @@ GET /api/areas/:id/status
 GET    /api/reservations
 GET    /api/reservations/current
 GET    /api/reservations/my
+GET    /api/reservations/quota
 POST   /api/reservations
 PATCH  /api/reservations/:id
 DELETE /api/reservations/:id

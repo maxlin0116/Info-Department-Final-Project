@@ -21,7 +21,17 @@ exports.getCurrentReservations = async (_req, res, next) => {
 exports.getMyReservations = async (req, res, next) => {
   try {
     const myReservations = await reservationService.getUserReservations(req.user.id);
-    res.status(200).json({ reservations: myReservations });
+    const quota = await reservationService.getUserQuota(req.user.id);
+    res.status(200).json({ reservations: myReservations, quota });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getMyReservationQuota = async (req, res, next) => {
+  try {
+    const quota = await reservationService.getUserQuota(req.user.id);
+    res.status(200).json({ quota });
   } catch (error) {
     next(error);
   }
