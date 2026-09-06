@@ -416,12 +416,12 @@ export function Dashboard() {
     );
   }, [enrichedReservations]);
 
-  const quotaPercent = useMemo(() => {
+  const quotaRemainingPercent = useMemo(() => {
     if (!reservationQuota || reservationQuota.limit <= 0) {
       return 0;
     }
 
-    return Math.min(100, Math.round((reservationQuota.used / reservationQuota.limit) * 100));
+    return Math.min(100, Math.round((reservationQuota.remaining / reservationQuota.limit) * 100));
   }, [reservationQuota]);
 
   const handleReserve = (area: AreaSummary) => {
@@ -657,17 +657,17 @@ export function Dashboard() {
                     Quota
                   </span>
                   <span className={reservationQuota.remaining === 0 ? "text-rose-300" : "text-slate-300"}>
-                    {reservationQuota.used}/{reservationQuota.limit}
+                    {reservationQuota.remaining}/{reservationQuota.limit} LEFT
                   </span>
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
                   <div
                     className={`h-full rounded-full ${reservationQuota.remaining === 0 ? "bg-rose-400" : "bg-emerald-400"}`}
-                    style={{ width: `${quotaPercent}%` }}
+                    style={{ width: `${quotaRemainingPercent}%` }}
                   />
                 </div>
                 <div className="mt-1 text-[9px] text-slate-600 font-mono">
-                  {reservationQuota.remaining}_LEFT · {reservationQuota.slotMinutes}MIN/PAX
+                  {reservationQuota.used}_USED · {reservationQuota.slotMinutes}MIN/PAX
                 </div>
               </div>
             ) : null}

@@ -605,13 +605,13 @@ export function ReservationModal({
                             RSVN_QUOTA
                           </span>
                           <span className="shrink-0">
-                            {quota.used}/{quota.limit}
+                            {quota.remaining}/{quota.limit} LEFT
                           </span>
                         </div>
                         <div className="mt-2 text-[11px] text-slate-400">
                           {selectedQuotaCost > 0
-                            ? `REQUEST_COST: ${selectedQuotaCost} · ${quota.remaining}_LEFT`
-                            : `${quota.remaining}_LEFT · ${quota.slotMinutes}MIN/PAX`}
+                            ? `REQUEST_COST: ${selectedQuotaCost} · ${quota.used}_USED`
+                            : `${quota.used}_USED · ${quota.slotMinutes}MIN/PAX`}
                         </div>
                         {quotaIssue ? <div className="mt-2 text-[11px] text-rose-200">{quotaIssue}</div> : null}
                       </div>
