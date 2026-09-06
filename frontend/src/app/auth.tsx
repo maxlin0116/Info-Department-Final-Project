@@ -57,6 +57,7 @@ interface AuthContextValue {
   register: (input: RegisterInput) => Promise<void>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   requestPasswordReset: (input: RequestPasswordResetInput) => Promise<void>;
+  validatePasswordResetToken: (token: string) => Promise<boolean>;
   resetPassword: (input: ResetPasswordInput) => Promise<void>;
   logout: () => void;
 }
@@ -293,6 +294,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await readApiPayload(response);
   };
 
+  const validatePasswordResetToken = async (token: string) => {
+    const response = await fetchWithTimeout(
+      getEndpoint("/api/auth/password-reset/validate?token=" + encodeURIComponent(token)),
+      {
+        method: "GET",
+      },
+      PASSWORD_RESET_REQUEST_TIMEOUT_MS
+    );
+
+    const payload = (await readApiPayload(response)) as { valid?: unknown };
+    return payload.valid === true;
+  };
+
   const resetPassword = async ({ token, newPassword }: ResetPasswordInput) => {
     const response = await fetchWithTimeout(
       getEndpoint("/api/auth/password-reset/confirm"),
@@ -350,6 +364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         changePassword,
         requestPasswordReset,
+        validatePasswordResetToken,
         resetPassword,
         logout,
       }}

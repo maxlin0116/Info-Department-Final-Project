@@ -101,6 +101,17 @@ exports.requestPasswordReset = async (req, res, next) => {
   }
 };
 
+exports.validatePasswordReset = async (req, res, next) => {
+  try {
+    const token = req.query.token;
+    const valid = await authService.validatePasswordResetToken(typeof token === "string" ? token : "");
+
+    res.status(200).json({ valid });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.resetPassword = async (req, res, next) => {
   try {
     const token = req.body.token;

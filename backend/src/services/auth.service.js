@@ -229,6 +229,21 @@ exports.requestPasswordReset = async (identifier) => {
   }
 };
 
+exports.validatePasswordResetToken = async (token) => {
+  const normalizedToken = token?.trim();
+  if (!normalizedToken) {
+    return false;
+  }
+
+  const tokenHash = hashResetToken(normalizedToken);
+  const user = await User.exists({
+    passwordResetTokenHash: tokenHash,
+    passwordResetExpiresAt: { $gt: new Date() },
+  });
+
+  return Boolean(user);
+};
+
 exports.resetPasswordWithToken = async (token, newPassword) => {
   const normalizedToken = token?.trim();
   if (!normalizedToken || typeof newPassword !== "string" || !newPassword.trim()) {

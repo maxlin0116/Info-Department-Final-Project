@@ -1,18 +1,66 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ArrowLeft, CheckCircle2, Cpu, KeyRound } from "lucide-react";
 import { useAuth } from "../auth";
 import { PasswordInput } from "./PasswordInput";
 
 export function ResetPassword() {
-  const { resetPassword } = useAuth();
+  const { resetPassword, validatePasswordResetToken } = useAuth();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [checkingToken, setCheckingToken] = useState(Boolean(token));
+  const [tokenValid, setTokenValid] = useState(Boolean(token));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(token ? null : "Password reset token is missing");
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!token) {
+      setCheckingToken(false);
+      setTokenValid(false);
+      setError("Password reset token is missing");
+      return () => {
+        active = false;
+      };
+    }
+
+    setCheckingToken(true);
+    setTokenValid(false);
+    setError(null);
+
+    validatePasswordResetToken(token)
+      .then((valid) => {
+        if (!active) {
+          return;
+        }
+
+        setTokenValid(valid);
+        if (!valid) {
+          setError("Password reset link is invalid or expired. Please request a new link.");
+        }
+      })
+      .catch((validationError) => {
+        if (!active) {
+          return;
+        }
+
+        setTokenValid(false);
+        setError(validationError instanceof Error ? validationError.message : "Could not validate reset link");
+      })
+      .finally(() => {
+        if (active) {
+          setCheckingToken(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -21,6 +69,11 @@ export function ResetPassword() {
 
     if (!token) {
       setError("Password reset token is missing");
+      return;
+    }
+
+    if (!tokenValid) {
+      setError("Password reset link is invalid or expired. Please request a new link.");
       return;
     }
 
@@ -101,15 +154,20 @@ export function ResetPassword() {
                   {error}
                 </div>
               ) : null}
+              {checkingToken ? (
+                <div className="rounded-lg border border-slate-700 bg-slate-950/50 px-4 py-3 text-sm text-slate-300">
+                  Checking reset link...
+                </div>
+              ) : null}
 
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={submitting || !token}
+                  disabled={submitting || checkingToken || !token || !tokenValid}
                   className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2 font-mono uppercase"
                 >
                   <KeyRound className="w-4 h-4" />
-                  {submitting ? "UPDATING..." : "RESET_PASSWORD"}
+                  {checkingToken ? "CHECKING..." : submitting ? "UPDATING..." : "RESET_PASSWORD"}
                 </button>
               </div>
             </form>
