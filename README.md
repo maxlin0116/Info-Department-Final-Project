@@ -82,7 +82,7 @@ SMTP_PASS=
 SMTP_CONNECTION_TIMEOUT_MS=15000
 SMTP_GREETING_TIMEOUT_MS=10000
 SMTP_SOCKET_TIMEOUT_MS=20000
-EMAIL_FROM="MakerSpace <no-reply@example.com>"
+EMAIL_FROM="MakerSpace <your-gmail-address>"
 PASSWORD_RESET_URL_BASE=http://localhost:5173
 PASSWORD_RESET_TOKEN_TTL_MINUTES=15
 ```
@@ -116,7 +116,400 @@ Default local URLs:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 
-## Production Deployment
+## Render + Vercel Deployment From Scratch
+
+This is the recommended deployment path for the current hosted project:
+
+```txt
+browser
+  |
+  v
+Vercel static frontend
+  |
+  | REST API requests
+  v
+Render Node/Express backend
+  |
+  | Mongoose
+  v
+MongoDB Atlas
+
+Render backend
+  |
+  | HTTPS Gmail API
+  v
+Google Workspace / Gmail password reset emails
+```
+
+Render Free cannot send email through normal SMTP ports, so password reset email should use `MAIL_PROVIDER=gmail_api`.
+Do not use a Google App Password on Render Free for this project.
+
+### 1. Push the Repository to GitHub
+
+Render and Vercel both deploy from GitHub in this setup.
+
+1. Make sure the latest code is pushed to the branch you want to deploy, usually `main`.
+2. Confirm the repository contains both `backend/` and `frontend/`.
+3. Do not commit `.env`, OAuth secrets, Gmail refresh tokens, MongoDB passwords, or API keys.
+
+Useful local checks:
+
+```bash
+git status
+git log --oneline --max-count=5
+```
+
+### 2. Create MongoDB Atlas Database
+
+The Render backend needs a MongoDB connection string in `MONGODB_URI`.
+MongoDB Atlas is the simplest hosted option.
+
+1. Open MongoDB Atlas and create a project.
+2. Create a free/shared cluster if this is for class or small usage.
+3. Create a database user with username and password authentication.
+4. Open `Network Access`.
+5. Add an IP access rule that allows Render to connect.
+   - Better production practice: allow only Render outbound IPs if available for your plan.
+   - Simpler class-project setup: allow `0.0.0.0/0`, but understand this allows any IP to try connecting, so the database password must be strong.
+6. Open the cluster's `Connect` dialog.
+7. Select `Connect your application`.
+8. Copy the `mongodb+srv://...` connection string.
+9. Replace `<username>`, `<password>`, and database name as needed.
+
+Example:
+
+```txt
+MONGODB_URI=mongodb+srv://<db-user>:<db-password>@cluster0.xxxxx.mongodb.net/mks_reservation?retryWrites=true&w=majority
+```
+
+If the database password contains special characters such as `@`, `/`, `:`, or `#`, URL-encode the password before putting it in the URI.
+
+### 3. Deploy the Backend on Render
+
+Create the backend first, because the frontend needs the Render backend URL.
+
+1. Open Render Dashboard.
+2. Click `New +`.
+3. Select `Web Service`.
+4. Connect the GitHub repository.
+5. Use these service settings:
+
+| Render Field | Value |
+| --- | --- |
+| Name | `mks-reservation-api` or any backend service name |
+| Runtime | `Node` |
+| Branch | `main` |
+| Root Directory | `backend` |
+| Build Command | `npm install` |
+| Start Command | `npm run prod` |
+| Plan | `Free` |
+
+`npm run prod` runs:
+
+```bash
+node src/database/ensureSeedData.js && node src/app.js
+```
+
+This seeds reservation areas and opening hours when the related collections are empty, then starts the Express API.
+
+### 4. Add Render Environment Variables
+
+In the Render backend service, open `Environment` and add:
+
+```txt
+NODE_ENV=production
+NODE_VERSION=20
+MONGODB_URI=<your MongoDB Atlas connection string>
+JWT_SECRET=<long random string>
+ADMIN_ACCESS_PASSWORD=<admin shared access password>
+RESERVATION_QUOTA_LIMIT=16
+AUTO_SEED_DATA=true
+FRONTEND_ORIGIN=https://<your-vercel-domain>
+FRONTEND_ORIGINS=
+MAIL_PROVIDER=gmail_api
+GMAIL_CLIENT_ID=<Google OAuth client ID>
+GMAIL_CLIENT_SECRET=<Google OAuth client secret>
+GMAIL_REFRESH_TOKEN=<Google OAuth refresh token>
+GMAIL_SENDER_EMAIL=<sender Gmail address>
+EMAIL_FROM="MakerSpace <sender Gmail address>"
+PASSWORD_RESET_URL_BASE=https://<your-vercel-domain>
+PASSWORD_RESET_TOKEN_TTL_MINUTES=15
+EMAIL_API_TIMEOUT_MS=15000
+```
+
+Generate strong local values for secrets:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Use one generated value for `JWT_SECRET`.
+Use a different strong value for `ADMIN_ACCESS_PASSWORD`.
+
+Do not set these SMTP variables on Render Free:
+
+```txt
+SMTP_HOST
+SMTP_PORT
+SMTP_SECURE
+SMTP_USER
+SMTP_PASS
+```
+
+Render Free blocks outbound SMTP traffic on ports `25`, `465`, and `587`.
+If the app shows an error such as `connect ENETUNREACH ... :587`, the service is still trying to use SMTP.
+Set `MAIL_PROVIDER=gmail_api`, remove SMTP variables, save, and redeploy.
+
+After saving environment variables, click:
+
+```txt
+Manual Deploy -> Clear build cache & deploy
+```
+
+When Render finishes, open:
+
+```txt
+https://<your-render-service>.onrender.com/api/health
+```
+
+Expected response:
+
+```json
+{ "ok": true }
+```
+
+### 5. Deploy the Frontend on Vercel
+
+1. Open Vercel Dashboard.
+2. Click `Add New...`.
+3. Select `Project`.
+4. Import the same GitHub repository.
+5. Configure the Vite frontend:
+
+| Vercel Field | Value |
+| --- | --- |
+| Framework Preset | `Vite` |
+| Root Directory | `frontend` |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+
+6. Add this Vercel environment variable:
+
+```txt
+VITE_API_BASE_URL=https://<your-render-service>.onrender.com
+```
+
+Do not add a trailing slash.
+
+7. Deploy the project.
+
+The frontend includes `frontend/vercel.json`:
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+
+This lets direct browser refresh work on React routes such as `/forgot-password`, `/reset-password`, and `/privacy`.
+
+After Vercel gives you the production URL, return to Render and update:
+
+```txt
+FRONTEND_ORIGIN=https://<your-vercel-domain>
+PASSWORD_RESET_URL_BASE=https://<your-vercel-domain>
+```
+
+Then redeploy the Render backend.
+
+### 6. Create Google Cloud Project for Gmail API
+
+The password reset flow sends email through Gmail API over HTTPS.
+This works on Render Free because it does not use SMTP.
+
+1. Open Google Cloud Console.
+2. Create or select a project, for example `MakerSpace RSVN SYS`.
+3. Search for `Gmail API`.
+4. Open `Gmail API`.
+5. Click `Enable`.
+
+### 7. Configure Google OAuth Brand and Audience
+
+Open `Google Auth Platform`.
+
+In `Brand`, fill:
+
+```txt
+App name: MakerSpace RSVN SYS
+User support email: <sender Gmail address>
+Developer contact email: <sender Gmail address>
+Homepage URL: https://<your-vercel-domain>
+Privacy Policy URL: https://<your-vercel-domain>/privacy
+```
+
+The frontend contains a public privacy policy page at:
+
+```txt
+https://<your-vercel-domain>/privacy
+```
+
+In `Audience`:
+
+1. Select `External`.
+2. Add the sender Gmail address as a test user if the app is still in testing.
+3. Publish the app to production when the brand page is complete.
+
+Production mode avoids the fixed 7-day refresh token behavior that appears while the OAuth app is in testing.
+
+### 8. Create Google OAuth Client
+
+In Google Cloud:
+
+1. Open `APIs & Services`.
+2. Open `Credentials`.
+3. Click `Create Credentials`.
+4. Select `OAuth client ID`.
+5. Choose `Web application`.
+6. Name it `MakerSpace Gmail Sender`.
+7. Add this authorized redirect URI:
+
+```txt
+https://developers.google.com/oauthplayground
+```
+
+8. Create the client.
+9. Copy the generated `Client ID` and `Client Secret`.
+
+Do not commit or screenshot these values.
+
+### 9. Generate Gmail Refresh Token
+
+Open OAuth 2.0 Playground:
+
+```txt
+https://developers.google.com/oauthplayground
+```
+
+1. Click the gear icon.
+2. Set `OAuth flow` to `Server-side`.
+3. Set `Access type` to `Offline`.
+4. Set `Force prompt` to `Consent Screen`.
+5. Enable `Use your own OAuth credentials`.
+6. Paste the OAuth `Client ID` and `Client Secret`.
+7. Close the settings panel.
+8. In Step 1, enter this scope:
+
+```txt
+https://www.googleapis.com/auth/gmail.send
+```
+
+9. Click `Authorize APIs`.
+10. Select the Gmail account that will send password reset emails.
+11. Allow the app to send email.
+12. Back in OAuth Playground, click `Exchange authorization code for tokens`.
+13. Copy the `Refresh token`.
+
+Use the copied value as:
+
+```txt
+GMAIL_REFRESH_TOKEN=<copied refresh token>
+```
+
+Confirm the token response does not include:
+
+```txt
+refresh_token_expires_in
+```
+
+If `refresh_token_expires_in` appears with a value around `604799`, the refresh token is time-limited to about 7 days.
+Make sure the OAuth app is in production, remove the old app connection from the Google Account permissions page, and generate the token again.
+
+The OAuth Playground `Auto-refresh the token before it expires` checkbox is only for testing inside the Playground.
+It does not affect the Render backend.
+
+### 10. Security Rules for Google Tokens
+
+Treat these as secrets:
+
+```txt
+GMAIL_CLIENT_SECRET
+GMAIL_REFRESH_TOKEN
+JWT_SECRET
+ADMIN_ACCESS_PASSWORD
+MONGODB_URI
+```
+
+Do not paste them in chat, commit them to GitHub, or put them in frontend/Vercel variables unless the frontend explicitly needs them.
+For this project, Gmail secrets belong only in Render backend environment variables.
+
+If a token or client secret is exposed:
+
+1. Go to Google Cloud `Credentials`.
+2. Regenerate the OAuth client secret or create a new OAuth client.
+3. Re-run OAuth Playground with the new secret.
+4. Replace `GMAIL_CLIENT_SECRET` and `GMAIL_REFRESH_TOKEN` in Render.
+5. Redeploy Render.
+
+Refresh tokens are long-lived when they are not time-limited, but they can still stop working if:
+
+- the Google Account owner removes app access
+- the Gmail password is changed
+- the token is unused for a long period
+- too many refresh tokens are created for the same account/client
+- Google or an administrator applies a security policy
+
+If Render logs show `invalid_grant`, generate a new refresh token and update Render.
+
+### 11. End-to-End Deployment Test
+
+After Render and Vercel are both deployed:
+
+1. Open the Vercel frontend.
+2. Register a user with a real `personal_email`.
+3. Open `/forgot-password`.
+4. Enter the registered email or student ID.
+5. Submit the reset request.
+6. Check the recipient inbox and spam folder.
+7. Open the reset link.
+8. Set a new password.
+9. Log in with the new password.
+
+Expected behavior:
+
+- the forgot-password page shows a success message
+- the email is sent from the configured Gmail account
+- the reset link points to the Vercel frontend domain
+- the reset token expires after `PASSWORD_RESET_TOKEN_TTL_MINUTES`
+- the same reset token cannot be reused after the password is changed
+
+### 12. Common Render and Email Errors
+
+| Error | Meaning | Fix |
+| --- | --- | --- |
+| `SMTP_HOST environment variable is not configured` | The backend is not configured for Gmail API, or old code is deployed | Set `MAIL_PROVIDER=gmail_api`, deploy the latest GitHub commit |
+| `connect ENETUNREACH ... :587` | The backend is trying to use SMTP on Render Free | Remove SMTP variables, set `MAIL_PROVIDER=gmail_api`, redeploy |
+| `GMAIL_REFRESH_TOKEN environment variable is not configured` | Missing Render env var | Add `GMAIL_REFRESH_TOKEN` in Render and redeploy |
+| `invalid_grant` | Refresh token is revoked, expired, or does not match the OAuth client | Generate a new refresh token with the same client ID/secret |
+| `redirect_uri_mismatch` | OAuth client does not allow OAuth Playground redirect URL | Add `https://developers.google.com/oauthplayground` as an authorized redirect URI |
+| `access_denied` during Google consent | User is not allowed to authorize the testing app | Add the Gmail account as a test user, or publish the OAuth app |
+| `CORS blocked for origin` | Render does not allow the Vercel origin | Set `FRONTEND_ORIGIN=https://<your-vercel-domain>` and redeploy |
+| Vercel frontend calls localhost | `VITE_API_BASE_URL` is missing or old | Add `VITE_API_BASE_URL=https://<your-render-service>.onrender.com` and redeploy Vercel |
+| Reset link opens the wrong domain | `PASSWORD_RESET_URL_BASE` is wrong | Set it to the Vercel production URL and redeploy Render |
+
+### 13. Official Deployment References
+
+- Render first deploy: <https://render.com/docs/your-first-deploy>
+- Render MongoDB Atlas connection guide: <https://render.com/docs/connect-to-mongodb-atlas>
+- Render Free SMTP limitation: <https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports>
+- MongoDB Atlas IP access list: <https://www.mongodb.com/docs/atlas/security/add-ip-address-to-list/>
+- Vercel Vite deployment: <https://vercel.com/docs/frameworks/frontend/vite>
+- Vercel environment variables: <https://vercel.com/docs/environment-variables>
+- Gmail API `users.messages.send`: <https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send>
+- Google OAuth 2.0 overview: <https://developers.google.com/identity/protocols/oauth2>
+- OAuth 2.0 Playground: <https://developers.google.com/oauthplayground/>
+
+## Department Server Docker Deployment
 
 This repository now includes a deployment setup that matches the department server flow from class:
 
@@ -169,7 +562,7 @@ SMTP_PASS=
 SMTP_CONNECTION_TIMEOUT_MS=15000
 SMTP_GREETING_TIMEOUT_MS=10000
 SMTP_SOCKET_TIMEOUT_MS=20000
-EMAIL_FROM="MakerSpace <no-reply@your-domain.ntuee.org>"
+EMAIL_FROM="MakerSpace <your-gmail-address>"
 PASSWORD_RESET_URL_BASE=https://your-domain.ntuee.org
 PASSWORD_RESET_TOKEN_TTL_MINUTES=15
 ```
