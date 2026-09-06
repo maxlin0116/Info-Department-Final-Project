@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, Gauge, LogIn } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
+import { QuotaInfo } from "./QuotaInfo";
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -603,6 +604,7 @@ export function ReservationModal({
                           <span className="inline-flex items-center gap-2 uppercase tracking-widest">
                             <Gauge className="w-3.5 h-3.5" />
                             RSVN_QUOTA
+                            <QuotaInfo />
                           </span>
                           <span className="shrink-0">
                             {quota.remaining}/{quota.limit} LEFT

@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ArrowLeft, CheckCircle2, Cpu, KeyRound } from "lucide-react";
 import { useAuth } from "../auth";
+import { PasswordInput } from "./PasswordInput";
 
 export function ResetPassword() {
   const { resetPassword } = useAuth();
@@ -77,25 +78,21 @@ export function ResetPassword() {
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">New Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   placeholder="New password"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Confirm Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   placeholder="Confirm password"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 />
               </div>
 

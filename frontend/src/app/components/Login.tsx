@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Cpu, ArrowRight } from "lucide-react";
 import { useAuth } from "../auth";
+import { PasswordInput } from "./PasswordInput";
 
 export function Login() {
   const navigate = useNavigate();
@@ -67,13 +68,11 @@ export function Login() {
                   Forgot password?
                 </Link>
               </div>
-              <input
-                type="password"
+              <PasswordInput
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
             </div>
 
@@ -100,13 +99,12 @@ export function Login() {
             {asAdmin ? (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Admin Access Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={adminPassword}
                   onChange={(event) => setAdminPassword(event.target.value)}
                   placeholder="Enter admin access password"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all"
+                  focusTone="amber"
                 />
               </div>
             ) : null}

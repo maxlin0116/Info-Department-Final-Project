@@ -3,6 +3,7 @@ import { Navigate } from "react-router";
 import { AlertCircle, CheckCircle2, KeyRound, Mail, Save, ShieldCheck } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
+import { PasswordInput } from "./PasswordInput";
 
 export function AccountSettings() {
   const { user, isAuthenticated, changePassword, requestPasswordReset } = useAuth();
@@ -135,38 +136,32 @@ export function AccountSettings() {
           <form className="p-5 space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">Current Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 required
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 placeholder="Current password"
-                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">New Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   placeholder="New password"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Confirm Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   placeholder="Confirm password"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 />
               </div>
             </div>

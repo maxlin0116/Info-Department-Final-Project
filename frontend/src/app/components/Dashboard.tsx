@@ -18,6 +18,7 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { ReservationModal } from "./ReservationModal";
 import { ReservationHistory } from "./ReservationHistory";
 import { useAuth } from "../auth";
+import { QuotaInfo } from "./QuotaInfo";
 
 type Status = "available" | "occupied" | "maintenance";
 type AreaType = "meeting" | "soldering" | "3dp" | "heavy_processing";
@@ -655,6 +656,7 @@ export function Dashboard() {
                   <span className="inline-flex items-center gap-1.5 text-slate-500">
                     <Gauge className="w-3.5 h-3.5 text-emerald-400" />
                     Quota
+                    <QuotaInfo />
                   </span>
                   <span className={reservationQuota.remaining === 0 ? "text-rose-300" : "text-slate-300"}>
                     {reservationQuota.remaining}/{reservationQuota.limit} LEFT

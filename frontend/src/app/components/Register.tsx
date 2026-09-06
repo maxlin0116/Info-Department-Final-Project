@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Cpu, ArrowRight } from "lucide-react";
 import { useAuth } from "../auth";
+import { PasswordInput } from "./PasswordInput";
 
 const STUDENT_ID_REGEX = /^[a-zA-Z]\d{8}$/;
 const GRADE_OPTIONS = [
@@ -140,25 +141,21 @@ export function Register() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Confirm Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 />
               </div>
             </div>
