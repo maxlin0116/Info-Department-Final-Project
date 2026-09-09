@@ -38,15 +38,31 @@ export function Layout() {
 
             {!isAuthPage ? (
               <div className="flex items-center gap-3 shrink-0">
+                <Link to="/fabrication/queues" className="hidden md:block text-xs font-mono text-slate-400 hover:text-emerald-300">QUEUES</Link>
                 {isAuthenticated && user ? (
                   <>
+                    <Link to="/fabrication/jobs" className="hidden md:block text-xs font-mono text-slate-400 hover:text-emerald-300">MY_JOBS</Link>
                     {user.role === "admin" ? (
-                      <Link
-                        to="/admin/reservations"
-                        className="px-4 py-2 text-xs font-mono font-medium text-amber-300 border border-amber-500/30 bg-amber-500/10 rounded-md hover:bg-amber-500/20 hover:border-amber-500/40 transition-all uppercase tracking-tighter"
-                      >
-                        ADMIN_REVIEW
-                      </Link>
+                      <>
+                        <Link
+                          to="/admin/reservations"
+                          className="hidden lg:inline-block px-3 py-2 text-xs font-mono font-medium text-amber-300 border border-amber-500/30 bg-amber-500/10 rounded-md hover:bg-amber-500/20 hover:border-amber-500/40 transition-all uppercase tracking-tighter"
+                        >
+                          RSVN_ADMIN
+                        </Link>
+                        <Link
+                          to="/admin/fabrication"
+                          className="px-3 py-2 text-xs font-mono font-medium text-amber-300 border border-amber-500/30 bg-amber-500/10 rounded-md hover:bg-amber-500/20 hover:border-amber-500/40 transition-all uppercase tracking-tighter"
+                        >
+                          FAB_ADMIN
+                        </Link>
+                        <Link
+                          to="/admin/users"
+                          className="px-3 py-2 text-xs font-mono font-medium text-cyan-300 border border-cyan-500/30 bg-cyan-500/10 rounded-md hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-all uppercase tracking-tighter"
+                        >
+                          USERS_ADMIN
+                        </Link>
+                      </>
                     ) : null}
                     <div className="hidden sm:block text-right">
                       <div className="text-xs font-mono font-bold text-slate-100 uppercase">{user.name}</div>
@@ -68,20 +84,12 @@ export function Layout() {
                     </button>
                   </>
                 ) : (
-                  <>
-                    <Link
-                      to="/register"
-                      className="px-4 py-2 text-xs font-mono font-medium text-slate-300 border border-slate-700 rounded-md hover:bg-slate-900 hover:border-slate-600 transition-all uppercase"
-                    >
-                      REGISTER
-                    </Link>
-                    <Link
-                      to="/login"
-                      className="px-4 py-2 text-xs font-mono font-medium text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 rounded-md hover:bg-emerald-400/20 hover:border-emerald-400/40 transition-all shadow-[0_0_15px_rgba(52,211,153,0.15)] hover:shadow-[0_0_20px_rgba(52,211,153,0.3)] uppercase"
-                    >
-                      LOGIN
-                    </Link>
-                  </>
+                  <Link
+                    to="/login"
+                    className="px-4 py-2 text-xs font-mono font-medium text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 rounded-md hover:bg-emerald-400/20 hover:border-emerald-400/40 transition-all shadow-[0_0_15px_rgba(52,211,153,0.15)] hover:shadow-[0_0_20px_rgba(52,211,153,0.3)] uppercase"
+                  >
+                    LOGIN
+                  </Link>
                 )}
               </div>
             ) : null}

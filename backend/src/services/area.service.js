@@ -1,6 +1,8 @@
 const Area = require("../models/area.model");
 const Reservation = require("../models/reservation.model");
 const OpeningHour = require("../models/openingHour.model");
+const FabricationJob = require("../models/fabricationJob.model");
+const { getConfig } = require("./fabricationConfig.service");
 const {
   addBusinessDays,
   endOfBusinessDay,
@@ -23,6 +25,9 @@ function toAreaPayload(area) {
     id: String(area._id),
     name: area.name,
     type: area.type,
+    bookingMode: area.bookingMode || (["3dp", "heavy_processing"].includes(area.type) ? "queue" : "schedule"),
+    serviceType: area.serviceType || (area.type === "heavy_processing" ? "laser" : area.type),
+    publicDisplayEnabled: area.publicDisplayEnabled !== false,
     maxCapacity: area.maxCapacity,
     description: area.description,
     showPrintingStatus: area.showPrintingStatus,
@@ -121,6 +126,28 @@ function overlaps(startA, endA, startB, endB) {
 }
 
 async function buildAreaStatus(area, currentTime) {
+  const bookingMode = area.bookingMode || (["3dp", "heavy_processing"].includes(area.type) ? "queue" : "schedule");
+  if (bookingMode === "queue") {
+    const serviceType = area.serviceType || (area.type === "heavy_processing" ? "laser" : area.type);
+    const [runningJobs, queuedJobs, config] = await Promise.all([
+      FabricationJob.countDocuments({ serviceType, status: "running" }),
+      FabricationJob.countDocuments({ serviceType, status: "queued" }),
+      getConfig()
+    ]);
+    const machine = config.machines.find((item) => item.serviceType === serviceType);
+    return {
+      area: toAreaPayload(area),
+      usedCount: runningJobs,
+      remainingCapacity: runningJobs ? 0 : 1,
+      activeReservationCount: runningJobs,
+      queueLength: queuedJobs,
+      isFull: runningJobs > 0,
+      hasActivePrinting: serviceType === "3dp" && runningJobs > 0,
+      machineStatus: machine?.status || "offline",
+      serviceOpen: machine?.serviceOpen !== false
+    };
+  }
+
   const currentReservations = await Reservation.find({
     area: area._id,
     status: { $in: ACTIVE_RESERVATION_STATUSES },
@@ -166,6 +193,12 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
   const area = await Area.findById(areaId).lean();
   if (!area) {
     return null;
+  }
+  const bookingMode = area.bookingMode || (["3dp", "heavy_processing"].includes(area.type) ? "queue" : "schedule");
+  if (bookingMode === "queue") {
+    const error = new Error("This area uses a file queue instead of time-slot reservations");
+    error.statusCode = 409;
+    throw error;
   }
 
   const requestedDays = Number.parseInt(days, 10);

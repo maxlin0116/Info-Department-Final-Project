@@ -10,6 +10,8 @@ const authRoutes = require("./routes/auth.routes");
 const areaRoutes = require("./routes/area.routes");
 const reservationRoutes = require("./routes/reservation.routes");
 const adminRoutes = require("./routes/admin.routes");
+const fabricationRoutes = require("./routes/fabrication.routes");
+const displayRoutes = require("./routes/display.routes");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -104,6 +106,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/areas", areaRoutes);
 app.use("/api/reservations", reservationRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/fabrication", fabricationRoutes);
+app.use("/api/public/display", displayRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.status(200).json({ ok: true });
@@ -136,7 +140,16 @@ app.use("/api", (_req, res) => {
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(error.statusCode || 500).json({
+  const statusCode = error.code === "LIMIT_FILE_SIZE"
+    ? 413
+    : error.code?.startsWith?.("LIMIT_")
+      ? 400
+      : error.name === "ValidationError" || error.name === "CastError"
+        ? 400
+        : error.code === 11000
+          ? 409
+          : error.statusCode || 500;
+  res.status(statusCode).json({
     error: error.message || "Internal server error",
   });
 });

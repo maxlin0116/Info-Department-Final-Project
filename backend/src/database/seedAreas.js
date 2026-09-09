@@ -10,6 +10,9 @@ const areas = [
   {
     name: "Meeting Area",
     type: "meeting",
+    bookingMode: "schedule",
+    serviceType: "meeting",
+    publicDisplayEnabled: true,
     maxCapacity: 8,
     description: "For meetings, discussions, and group work",
     showPrintingStatus: false,
@@ -18,6 +21,9 @@ const areas = [
   {
     name: "Soldering Table",
     type: "soldering",
+    bookingMode: "schedule",
+    serviceType: "soldering",
+    publicDisplayEnabled: true,
     maxCapacity: 8,
     description: "For soldering and electronics work",
     showPrintingStatus: false,
@@ -26,6 +32,9 @@ const areas = [
   {
     name: "3DP Area",
     type: "3dp",
+    bookingMode: "queue",
+    serviceType: "3dp",
+    publicDisplayEnabled: true,
     maxCapacity: 1,
     description: "For 3D printing reservations",
     showPrintingStatus: true,
@@ -34,6 +43,9 @@ const areas = [
   {
     name: "Heavy Processing Area",
     type: "heavy_processing",
+    bookingMode: "queue",
+    serviceType: "laser",
+    publicDisplayEnabled: true,
     maxCapacity: 1,
     description: "For heavy processing or machining work",
     showPrintingStatus: false,

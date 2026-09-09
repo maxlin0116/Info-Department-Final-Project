@@ -1,4 +1,4 @@
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
@@ -64,6 +64,8 @@ function serializeUser(user, roleOverride) {
     studentId: source.studentId,
     personalEmail: source.personalEmail,
     role: roleOverride ?? source.role,
+    mustChangePassword: Boolean(source.mustChangePassword),
+    isActive: source.isActive !== false,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
@@ -85,41 +87,11 @@ function issueToken(user, roleOverride) {
 
 exports.serializeUser = serializeUser;
 
-exports.registerUser = async (userData) => {
-  const name = userData.name?.trim();
-  const grade = userData.grade?.trim();
-  const studentId = userData.studentId?.trim();
-  const password = userData.password;
-  const personalEmail = userData.personalEmail?.trim().toLowerCase();
-
-  if (!name || !grade || !studentId || !password || !personalEmail) {
-    throw createError(400, "All fields are required");
-  }
-
-  if (!STUDENT_ID_REGEX.test(studentId)) {
-    throw createError(400, "Student ID must be one letter followed by 8 digits");
-  }
-
-  const existingUser = await User.findOne({ studentId });
-  if (existingUser) {
-    throw createError(409, "This student ID is already registered");
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-
-  const user = await User.create({
-    name,
-    grade,
-    studentId,
-    passwordHash,
-    personalEmail,
-    role: "user",
-  });
-
-  return {
-    token: issueToken(user),
-    user: serializeUser(user),
-  };
+exports.registerUser = async () => {
+  throw createError(
+    403,
+    "Public registration is disabled. Accounts are centrally assigned by MakerSpace administration."
+  );
 };
 
 exports.loginUser = async (studentId, password, options = {}) => {
@@ -131,6 +103,10 @@ exports.loginUser = async (studentId, password, options = {}) => {
   const user = await User.findOne({ studentId: normalizedStudentId });
   if (!user) {
     throw createError(401, "Invalid student ID or password");
+  }
+
+  if (user.isActive === false) {
+    throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
@@ -185,6 +161,7 @@ exports.changePassword = async (userId, currentPassword, newPassword) => {
   }
 
   user.passwordHash = await bcrypt.hash(newPassword, 10);
+  user.mustChangePassword = false;
   await user.save();
 
   return serializeUser(user);
@@ -263,6 +240,7 @@ exports.resetPasswordWithToken = async (token, newPassword) => {
   user.passwordHash = await bcrypt.hash(newPassword, 10);
   user.passwordResetTokenHash = undefined;
   user.passwordResetExpiresAt = undefined;
+  user.mustChangePassword = false;
   await user.save();
 
   return serializeUser(user);

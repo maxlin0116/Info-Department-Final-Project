@@ -133,6 +133,16 @@ export function AccountSettings() {
             </div>
           </div>
 
+          {user?.mustChangePassword ? (
+            <div className="m-5 mb-0 p-4 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3 text-amber-200">
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs leading-relaxed">
+                <div className="font-bold text-amber-300 uppercase tracking-wide font-mono mb-0.5">Password Update Required</div>
+                You are currently signed in with a temporary password provided by administration. Please set a new password below.
+              </div>
+            </div>
+          ) : null}
+
           <form className="p-5 space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">Current Password</label>

@@ -5,4 +5,13 @@ frontend/.env
 *.log
 .vscode/
 frontend/dist/
+backend/storage/
+prod-support/bambu-profiles/machine.json
+prod-support/bambu-profiles/process.json
+prod-support/bambu-profiles/filament.json
+prod-support/bambu-studio/*.AppImage
+prod-support/bambu-studio/squashfs-root/
 .gemini/
+*credentials*.csv
+*credentials*.json
+backend/scripts/output/

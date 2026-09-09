@@ -13,6 +13,8 @@ export interface AuthUser {
   studentId: string;
   personalEmail: string;
   role: string;
+  mustChangePassword?: boolean;
+  isActive?: boolean;
 }
 
 interface AuthState {
@@ -53,7 +55,7 @@ interface AuthContextValue {
   token: string | null;
   user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (input: LoginInput) => Promise<void>;
+  login: (input: LoginInput) => Promise<AuthUser>;
   register: (input: RegisterInput) => Promise<void>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   requestPasswordReset: (input: RequestPasswordResetInput) => Promise<void>;
@@ -74,6 +76,8 @@ function normalizeUser(payload: unknown): AuthUser {
     studentId: String(source.studentId ?? source.student_id ?? ""),
     personalEmail: String(source.personalEmail ?? source.personal_email ?? ""),
     role: String(source.role ?? "user"),
+    mustChangePassword: Boolean(source.mustChangePassword),
+    isActive: source.isActive !== false,
   };
 }
 
@@ -215,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setAuthState(nextState);
     persistAuth(nextState);
+    return nextState.user;
   };
 
   const register = async ({ name, grade, studentId, personalEmail, password }: RegisterInput) => {

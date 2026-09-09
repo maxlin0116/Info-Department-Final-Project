@@ -18,3 +18,21 @@
     background-color: theme('colors.slate.600');
   }
 }
+
+@layer components {
+  .admin-action {
+    @apply inline-flex items-center gap-1.5 rounded border border-slate-700 bg-slate-950/60 px-3 py-1.5 text-xs hover:bg-slate-800 disabled:opacity-50;
+  }
+  .admin-action svg {
+    @apply h-3.5 w-3.5;
+  }
+  .display-panel {
+    @apply rounded-2xl border border-slate-800 bg-slate-900/50 p-5 min-h-[65vh];
+  }
+  .display-panel-title {
+    @apply mb-5 flex items-center gap-2 border-b border-slate-800 pb-4 font-mono text-lg text-slate-100;
+  }
+  .display-panel-title svg {
+    @apply h-5 w-5 text-emerald-400;
+  }
+}

@@ -72,6 +72,8 @@ function serializeArea(area) {
     id: String(area._id ?? area.id),
     name: area.name,
     type: area.type,
+    bookingMode: area.bookingMode || (["3dp", "heavy_processing"].includes(area.type) ? "queue" : "schedule"),
+    serviceType: area.serviceType || (area.type === "heavy_processing" ? "laser" : area.type),
     maxCapacity: area.maxCapacity,
     description: area.description,
     showPrintingStatus: area.showPrintingStatus,
@@ -198,6 +200,11 @@ async function validateReservationWindow(area, startTime, endTime, participantCo
 
   if (!area.isActive) {
     throw createError(400, "This area is currently unavailable for reservations");
+  }
+
+  const bookingMode = area.bookingMode || (["3dp", "heavy_processing"].includes(area.type) ? "queue" : "schedule");
+  if (bookingMode === "queue") {
+    throw createError(409, "This resource accepts file-queue jobs instead of time-slot reservations");
   }
 
   if (!Number.isInteger(participantCount) || participantCount < 1) {

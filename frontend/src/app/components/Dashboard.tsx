@@ -31,6 +31,8 @@ interface AreaSummary {
   description: string;
   showPrintingStatus: boolean;
   isActive: boolean;
+  bookingMode: "schedule" | "queue";
+  serviceType: "meeting" | "soldering" | "3dp" | "laser";
 }
 
 interface AreaStatusItem {
@@ -40,6 +42,9 @@ interface AreaStatusItem {
   activeReservationCount: number;
   isFull: boolean;
   hasActivePrinting: boolean;
+  queueLength?: number;
+  machineStatus?: string;
+  serviceOpen?: boolean;
 }
 
 interface AreaStatusResponse {
@@ -253,7 +258,7 @@ const getAreaMeta = (type: AreaType): AreaMeta => {
 };
 
 const getAreaStatusKind = (item: AreaStatusItem): Status => {
-  if (!item.area.isActive) {
+  if (!item.area.isActive || item.serviceOpen === false || ["maintenance", "offline"].includes(item.machineStatus || "")) {
     return "maintenance";
   }
 
@@ -267,6 +272,10 @@ const getAreaStatusKind = (item: AreaStatusItem): Status => {
 const getAreaDetails = (item: AreaStatusItem) => {
   if (!item.area.isActive) {
     return "Temporarily unavailable";
+  }
+
+  if (item.area.bookingMode === "queue") {
+    return `${item.machineStatus || "idle"} · ${item.queueLength || 0} job(s) waiting`;
   }
 
   if (item.area.showPrintingStatus) {
@@ -286,7 +295,7 @@ const cardVariants = {
     transition: {
       delay: i * 0.1,
       duration: 0.5,
-      ease: [0.22, 1, 0.36, 1],
+      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   }),
 };
@@ -345,14 +354,14 @@ function AreaCard({
 
       <div className="grid grid-cols-2 gap-3 text-xs text-slate-300 mb-4">
         <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1 font-mono">In Use</div>
+          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1 font-mono">{item.area.bookingMode === "queue" ? "Running" : "In Use"}</div>
           <div className="text-base font-semibold text-slate-100 font-mono">
-            {item.usedCount}/{item.area.maxCapacity}
+            {item.area.bookingMode === "queue" ? item.usedCount : `${item.usedCount}/${item.area.maxCapacity}`}
           </div>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1 font-mono">Remaining</div>
-          <div className="text-base font-semibold text-slate-100 font-mono">{item.remainingCapacity}</div>
+          <div className="text-slate-500 uppercase tracking-widest text-[10px] mb-1 font-mono">{item.area.bookingMode === "queue" ? "Queued" : "Remaining"}</div>
+          <div className="text-base font-semibold text-slate-100 font-mono">{item.area.bookingMode === "queue" ? item.queueLength || 0 : item.remainingCapacity}</div>
         </div>
       </div>
 
@@ -366,14 +375,22 @@ function AreaCard({
               ? "Area is full"
               : "Area accepts reservations"}
         </div>
-        <button
-          onClick={() => onReserve(item.area)}
-          disabled={!item.area.isActive}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 transition-all text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Reserve
-        </button>
+        {item.area.bookingMode === "queue" ? (
+          <Link
+            to={`/fabrication/${item.area.serviceType}`}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 transition-all text-slate-200 ${!item.area.isActive || item.serviceOpen === false ? "pointer-events-none opacity-50" : ""}`}
+          >
+            <Plus className="w-3.5 h-3.5" /> Upload & Queue
+          </Link>
+        ) : (
+          <button
+            onClick={() => onReserve(item.area)}
+            disabled={!item.area.isActive}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 transition-all text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" /> Reserve
+          </button>
+        )}
       </div>
     </motion.div>
   );

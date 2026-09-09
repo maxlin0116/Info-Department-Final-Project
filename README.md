@@ -16,9 +16,12 @@ The system focuses on reservation and usage registration only. It does not inclu
 
 The current codebase already includes the following end-to-end features:
 
-- User registration and login with JWT-based sessions
+- Centralized account provisioning and login with JWT-based sessions
+- Public self-registration disabled (API returns `403 Forbidden`; accounts issued centrally)
+- Batch account provisioning CLI (`npm run provision:users`) with roster import, random password generation, and credentials export
+- Mandatory first-login password change flow (`mustChangePassword: true`)
+- Web-based user management dashboard at `/admin/users` (password reset, role changes, account suspension, and safe deletion)
 - Student ID validation (`1 letter + 8 digits`) on both frontend and backend
-- Grade selection from a predefined dropdown on the registration page
 - Optional admin session login from the frontend using a server-side `ADMIN_ACCESS_PASSWORD`
 - Automatic frontend logout when the JWT session expires
 - Live area status driven by backend reservation data
@@ -32,6 +35,76 @@ The current codebase already includes the following end-to-end features:
 - Reservation history separated from active reservations on the dashboard
 - 6-hour cancellation restriction for regular users
 - Admin review page for approving or rejecting pending reservations
+- STL/3MF upload, browser model preview, basic Bambu-style print settings, and server-side P1S slicing
+- Monthly 3DP quota accounting by estimated print minutes (default 600 minutes, admin configurable)
+- Four-slot AMS color selection with admin reassignment
+- DXF intake with manual admin duration review
+- Fixed laser material/thickness choices: 3/5 mm MDF and 3/5 mm acrylic
+- Separate FIFO queues for the single P1S and single laser cutter
+- Public always-on display at `/display` with today's reservations, machine states, names, and both queues
+
+## Fabrication Workflow
+
+3DP and laser are queue services; Meeting Area and Soldering Table continue to use time-slot reservations.
+
+### 3DP
+
+```txt
+upload STL/3MF -> adjust scale/layer/infill/support/brim -> Linux worker slices
+-> review estimated time -> choose an available AMS slot/color -> admin review
+-> FIFO queue -> running -> completed/failed -> physical collection acknowledgement
+```
+
+- Target profile: one Bambu Lab P1S, stock 0.4 mm nozzle, Bambu PLA Basic.
+- Quota is reserved when the user confirms the estimate and consumed when the admin starts the job.
+- Cancelling or rejecting a not-yet-started job returns reserved quota.
+- The generated `.gcode.3mf` is available to the owner and admins.
+- Slicing is a local file operation. The worker does **not** need to be on the P1S LAN because this implementation does not send jobs to or read telemetry from the printer.
+
+### Laser
+
+```txt
+upload DXF + choose material/thickness -> admin downloads/checks file and enters minutes
+-> FIFO queue -> running -> completed/failed -> physical collection acknowledgement
+```
+
+Laser quota is disabled by default. If an admin enables it, the manually entered duration becomes the quota value.
+
+### Admin and public display
+
+- `/admin/users`: manages student and admin accounts, issues temporary passwords, updates roles, suspends or deletes accounts.
+- `/admin/reservations`: reviews, approves, or rejects pending space reservations.
+- `/admin/fabrication`: estimates laser jobs, reviews 3DP, changes AMS assignment, manages machines/colors/quotas, and advances job states.
+- `/fabrication/jobs`: a user's own jobs and current 3DP quota.
+- `/fabrication/queues`: public queue view.
+- `/display`: kiosk-style always-on view, refreshed through SSE with a 30-second polling fallback.
+
+Queue order is enforced FIFO by `queueEnteredAt`; an admin cannot start a later job while an earlier queued job remains.
+The live queue shows waiting-for-review, queued, running, and completed jobs to
+users and administrators. A completed job remains there until its owner or an
+administrator confirms that the physical item was collected. The acknowledgement
+removes it from the live queue while retaining it in job history.
+
+## Linux Slicing Deployment
+
+Production uses three containers sharing MongoDB and a persistent file volume:
+
+```txt
+web/API ---- MongoDB ---- slicer worker (Bambu Studio CLI)
+   |                           |
+   +------ shared files -------+
+```
+
+The Docker image is Debian Bookworm/glibc based rather than Alpine because the official Bambu Studio Linux build needs desktop runtime libraries. The slicing worker is independent from the web process, claims jobs atomically, and recovers stale claims after 15 minutes.
+
+Before `docker compose up`:
+
+1. Put a tested Linux launcher at `prod-support/bambu-studio/bambu-studio`.
+2. Put full P1S/process/PLA configs in `prod-support/bambu-profiles/` as documented there.
+3. Set secrets and paths in `prod-support/.env`.
+4. Confirm the project's Bambu Studio AGPL-3.0 distribution/source-code arrangement. This repository does not bundle Bambu Studio.
+
+The CLI/profile contract follows Bambu Studio's official command-line usage. Pin and acceptance-test a known-good Bambu Studio version before production; CLI behavior has varied between releases.
 
 ## Reservation Areas
 
@@ -91,8 +164,8 @@ PASSWORD_RESET_TOKEN_TTL_MINUTES=15
 
 ```bash
 cd backend
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 3. Optional seed commands:
@@ -107,14 +180,77 @@ npm run seed:opening-hours
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Default local URLs:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
+
+### Account Provisioning & Administration
+
+Public self-registration is disabled. User accounts are centrally provisioned via the batch provisioning CLI tool or managed through the web interface.
+
+#### 1. Batch Account Provisioning CLI
+
+The `provisionUsers.js` utility imports a roster of students from a CSV or JSON file, validates records, generates secure random passwords, hashes them with `bcrypt`, marks them for mandatory password reset on first login (`mustChangePassword: true`), and exports a timestamped CSV of credentials for distribution.
+
+##### Run Provisioning:
+
+```bash
+cd backend
+# Dry run to validate the file without database changes:
+npm run provision:users -- --input scripts/sample_roster.csv --dry-run
+
+# Provision users into MongoDB:
+npm run provision:users -- --input scripts/sample_roster.csv
+```
+
+##### Input Roster Format (CSV):
+
+Prepare a CSV file with the following headers (see `backend/scripts/sample_roster.csv` for a template):
+
+```csv
+studentId,name,grade,personalEmail,role
+b11901001,Alice Chen,Junior,b11901001@ntu.edu.tw,user
+b11901002,Bob Lin,Senior,b11901002@ntu.edu.tw,user
+b10901099,Admin Assistant,Senior,labadmin@ntu.edu.tw,admin
+```
+
+- `studentId`: Must match `1 letter + 8 digits` (e.g. `b11901001`).
+- `name`: Student or lab member's full name.
+- `grade`: e.g. `Freshman`, `Sophomore`, `Junior`, `Senior`, `Master's`, `PhD`.
+- `personalEmail`: Valid email format for notifications.
+- `role`: Optional. Either `user` (default) or `admin`.
+
+##### CLI Options:
+
+| Option | Description |
+| --- | --- |
+| `--input <path>` | Path to the input roster CSV or JSON file (required). |
+| `--output <path>` | Custom path to save the generated credentials CSV. Defaults to `backend/scripts/output/credentials_<timestamp>.csv`. |
+| `--skip-existing` | Skip student IDs that already exist in the database (default behavior). |
+| `--update-existing` | Update details and regenerate a new temporary password for existing student IDs. |
+| `--dry-run` | Validates file format and schema constraints without connecting to MongoDB or writing credentials. |
+| `--help`, `-h` | Display command usage and option flags. |
+
+> [!NOTE]
+> **Security Notice**: The generated credentials file contains temporary plaintext passwords. Deliver these credentials through official university channels, instruct students to change their password upon their first sign-in, and securely delete or archive the exported credentials file. Credentials files in `scripts/output/` are automatically excluded by `.gitignore`.
+
+#### 2. Web-Based User Administration (`/admin/users`)
+
+Administrators can also manage accounts interactively through the frontend:
+
+1. Log in with admin privileges (check "Admin login" on the login page and enter the configured `ADMIN_ACCESS_PASSWORD`).
+2. Click **USERS_ADMIN** in the top navigation bar (or navigate to `/admin/users`).
+3. Available actions:
+   - **Add User**: Manually create an individual account with custom or generated passwords.
+   - **Reset Password**: Instantly generate a temporary password for a student, presented in a copyable modal.
+   - **Role Toggle**: Promote a student to `admin` or demote an `admin` to `user`.
+   - **Account Suspension**: Toggle accounts between `Active` and `Suspended` without losing reservation history.
+   - **Safe Deletion**: Permanently delete accounts (prevented if active reservations exist).
 
 ## Render + Vercel Deployment From Scratch
 
@@ -598,6 +734,7 @@ docker compose up -d --build
 This starts:
 
 - `mks-reservation-web`
+- `mks-reservation-slicer`
 - `mks-reservation-mongo`
 
 The web app listens on port `4000` inside the container and also publishes `4000:4000` on the host for debugging.
@@ -640,6 +777,7 @@ Container status:
 ```bash
 docker compose ps
 docker compose logs -f mks-reservation-web
+docker compose logs -f mks-reservation-slicer
 docker compose logs -f mks-reservation-mongo
 ```
 

@@ -14,6 +14,20 @@ const areaSchema = new mongoose.Schema(
       enum: ["meeting", "soldering", "3dp", "heavy_processing"],
       required: true
     },
+    bookingMode: {
+      type: String,
+      enum: ["schedule", "queue"],
+      default: "schedule"
+    },
+    serviceType: {
+      type: String,
+      enum: ["meeting", "soldering", "3dp", "laser"],
+      required: true
+    },
+    publicDisplayEnabled: {
+      type: Boolean,
+      default: true
+    },
     maxCapacity: {
       type: Number,
       required: true,

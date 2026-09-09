@@ -1,0 +1,5 @@
+studentId,name,grade,personalEmail,role
+b11901001,Alice Chen,Junior,b11901001@ntu.edu.tw,user
+b11901002,Bob Lin,Senior,b11901002@ntu.edu.tw,user
+b12901003,Charlie Wang,Freshman,charlie.w@example.com,user
+b10901099,Admin LabAssistant,Senior,labadmin@ntu.edu.tw,admin

@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const connectDatabase = require("./db");
 const Area = require("../models/area.model");
 const OpeningHour = require("../models/openingHour.model");
+const { ensureFabricationDefaults } = require("../services/fabricationConfig.service");
 const { areas } = require("./seedAreas");
 const { openingHours } = require("./seedOpeningHours");
 
@@ -37,6 +38,22 @@ async function ensureSeedData() {
   try {
     await ensureCollectionData(Area, "Areas", areas);
     await ensureCollectionData(OpeningHour, "Opening hours", openingHours);
+    for (const area of areas) {
+      const { bookingMode, serviceType, publicDisplayEnabled, ...insertDefaults } = area;
+      await Area.updateOne(
+        { type: area.type },
+        {
+          $set: {
+            bookingMode,
+            serviceType,
+            publicDisplayEnabled
+          },
+          $setOnInsert: insertDefaults
+        },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
+    }
+    await ensureFabricationDefaults();
   } finally {
     await mongoose.disconnect();
   }

@@ -24,8 +24,12 @@ export function Login() {
     setError(null);
 
     try {
-      await login({ studentId, password, asAdmin, adminPassword });
-      navigate("/", { replace: true });
+      const loggedUser = await login({ studentId, password, asAdmin, adminPassword });
+      if (loggedUser?.mustChangePassword) {
+        navigate("/account", { replace: true, state: { temporaryPasswordNotice: true } });
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Login failed");
     } finally {
@@ -127,13 +131,11 @@ export function Login() {
             </div>
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-400">
-            Don&apos;t have an account?{" "}
-            <Link to="/register" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
-              Sign up
-            </Link>
+          <div className="mt-6 p-3.5 rounded-xl border border-slate-800 bg-slate-950/70 text-center text-xs text-slate-400 leading-relaxed">
+            <span className="font-semibold text-slate-300 block mb-1">Need an account?</span>
+            Accounts are centrally assigned by MakerSpace administration. If you have not received your login credentials, please contact the lab administrator.
           </div>
-          <div className="mt-3 text-center text-xs text-slate-500">
+          <div className="mt-4 text-center text-xs text-slate-500">
             <Link to="/privacy" className="hover:text-emerald-300 transition-colors">
               Privacy Policy
             </Link>

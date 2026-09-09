@@ -1,4 +1,5 @@
 const reservationService = require("../services/reservation.service");
+const { publishDisplayChange } = require("../services/displayEvents.service");
 
 exports.getAllReservations = async (_req, res, next) => {
   try {
@@ -40,6 +41,7 @@ exports.getMyReservationQuota = async (req, res, next) => {
 exports.createReservation = async (req, res, next) => {
   try {
     const newReservation = await reservationService.createReservation(req.user, req.body);
+    publishDisplayChange("reservation_created");
 
     res.status(201).json({
       message: "Reservation successful",
@@ -53,6 +55,7 @@ exports.createReservation = async (req, res, next) => {
 exports.updateReservation = async (req, res, next) => {
   try {
     const updatedReservation = await reservationService.updateReservation(req.user, req.params.id, req.body);
+    publishDisplayChange("reservation_updated");
     res.status(200).json({ message: "Reservation updated successfully", reservation: updatedReservation });
   } catch (error) {
     next(error);
@@ -62,6 +65,7 @@ exports.updateReservation = async (req, res, next) => {
 exports.cancelReservation = async (req, res, next) => {
   try {
     const cancelledReservation = await reservationService.cancelReservation(req.user, req.params.id, new Date());
+    publishDisplayChange("reservation_cancelled");
     res.status(200).json({ message: "Reservation cancelled successfully", reservation: cancelledReservation });
   } catch (error) {
     next(error);

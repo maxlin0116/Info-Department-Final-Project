@@ -34,15 +34,47 @@ services:
       PASSWORD_RESET_URL_BASE: ${PASSWORD_RESET_URL_BASE:-}
       PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-15}
       AUTO_SEED_DATA: ${AUTO_SEED_DATA:-true}
+      FILE_STORAGE_ROOT: /app/storage
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
     ports:
       - "4000:4000"
     expose:
       - "4000"
     depends_on:
       - mks-reservation-mongo
+    volumes:
+      - fabrication_files:/app/storage
     networks:
       - mks-reservation
       - nginx
+    restart: unless-stopped
+
+  mks-reservation-slicer:
+    container_name: mks-reservation-slicer
+    build:
+      context: ..
+      dockerfile: prod-support/Dockerfile
+    command: ["npm", "run", "worker:slicer"]
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mks-reservation-mongo:27017/mks_reservation}
+      FILE_STORAGE_ROOT: /app/storage
+      BAMBU_STUDIO_CLI: /opt/bambu-studio/bambu-studio
+      BAMBU_STUDIO_USE_XVFB: ${BAMBU_STUDIO_USE_XVFB:-true}
+      BAMBU_MACHINE_PROFILE: /opt/bambu-profiles/machine.json
+      BAMBU_PROCESS_PROFILE: /opt/bambu-profiles/process.json
+      BAMBU_FILAMENT_PROFILE: /opt/bambu-profiles/filament.json
+      BAMBU_PROFILE_VERSION: ${BAMBU_PROFILE_VERSION:-P1S-0.4-Bambu-PLA-Basic}
+      SLICER_TIMEOUT_MS: ${SLICER_TIMEOUT_MS:-300000}
+      SLICER_STALE_LOCK_MS: ${SLICER_STALE_LOCK_MS:-900000}
+    depends_on:
+      - mks-reservation-mongo
+    volumes:
+      - fabrication_files:/app/storage
+      - ${BAMBU_STUDIO_DIR:-./bambu-studio}:/opt/bambu-studio:ro
+      - ${BAMBU_PROFILE_DIR:-./bambu-profiles}:/opt/bambu-profiles:ro
+    networks:
+      - mks-reservation
     restart: unless-stopped
 
   mks-reservation-mongo:
@@ -58,6 +90,7 @@ services:
 
 volumes:
   mongo_data:
+  fabrication_files:
 
 networks:
   nginx:

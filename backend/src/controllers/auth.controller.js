@@ -1,34 +1,10 @@
 const authService = require("../services/auth.service");
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-exports.register = async (req, res, next) => {
-  try {
-    const name = req.body.name;
-    const grade = req.body.grade;
-    const studentId = req.body.studentId ?? req.body.student_id;
-    const password = req.body.password;
-    const personalEmail = req.body.personalEmail ?? req.body.personal_email;
-
-    if (!name || !grade || !studentId || !password || !personalEmail) {
-      return res.status(400).json({ error: "All fields are required" });
-    }
-
-    if (!emailRegex.test(personalEmail)) {
-      return res.status(400).json({ error: "Invalid email format. Please check for missing @ or ." });
-    }
-
-    const result = await authService.registerUser({
-      name,
-      grade,
-      studentId,
-      password,
-      personalEmail,
-    });
-
-    res.status(201).json({ message: "Registration successful", ...result });
-  } catch (error) {
-    next(error);
-  }
+exports.register = async (_req, res) => {
+  return res.status(403).json({
+    error: "Public registration is disabled. Accounts are centrally assigned by MakerSpace administration."
+  });
 };
 
 exports.login = async (req, res, next) => {
