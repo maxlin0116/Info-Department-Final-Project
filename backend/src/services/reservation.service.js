@@ -14,9 +14,11 @@ const VALID_TIME_BLOCKS = [
   { start: 18 * 60, end: 22 * 60 },
 ];
 
-const ACTIVE_STATUSES = ["approved", "pending"];
+const ACTIVE_STATUSES = ["approved", "pending", "check_in_pending", "in_use"];
 const QUOTA_SLOT_MINUTES = 30;
-const DEFAULT_RESERVATION_QUOTA_LIMIT = 16;
+const DEFAULT_RESERVATION_QUOTA_LIMIT = 64;
+const DEFAULT_CHECK_IN_EARLY_MINUTES = 15;
+const DEFAULT_CHECK_IN_GRACE_MINUTES = 15;
 
 function createError(statusCode, message) {
   const error = new Error(message);
@@ -27,6 +29,28 @@ function createError(statusCode, message) {
 function getReservationQuotaLimit() {
   const parsed = Number.parseInt(process.env.RESERVATION_QUOTA_LIMIT ?? "", 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_RESERVATION_QUOTA_LIMIT;
+}
+
+function getPositiveIntegerEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function getCheckInPolicy() {
+  return {
+    earlyMinutes: getPositiveIntegerEnv("RESERVATION_CHECK_IN_EARLY_MINUTES", DEFAULT_CHECK_IN_EARLY_MINUTES),
+    graceMinutes: getPositiveIntegerEnv("RESERVATION_CHECK_IN_GRACE_MINUTES", DEFAULT_CHECK_IN_GRACE_MINUTES)
+  };
+}
+
+function getCheckInWindow(startTime) {
+  const policy = getCheckInPolicy();
+  const start = new Date(startTime).getTime();
+  return {
+    ...policy,
+    opensAt: new Date(start - policy.earlyMinutes * 60 * 1000),
+    closesAt: new Date(start + policy.graceMinutes * 60 * 1000)
+  };
 }
 
 function calculateReservationQuotaCost(startTime, endTime, participantCount) {
@@ -115,6 +139,15 @@ function serializeReservation(reservation) {
     startTime: source.startTime,
     endTime: source.endTime,
     status: source.status,
+    checkInRequestedAt: source.checkInRequestedAt,
+    attendanceConfirmedAt: source.attendanceConfirmedAt,
+    attendanceConfirmedBy: source.attendanceConfirmedBy
+      ? String(source.attendanceConfirmedBy._id ?? source.attendanceConfirmedBy)
+      : null,
+    noShowAt: source.noShowAt,
+    completedAt: source.completedAt,
+    lifecycleReason: source.lifecycleReason ?? "",
+    checkInWindow: getCheckInWindow(source.startTime),
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
@@ -269,6 +302,94 @@ exports.getUserQuota = async (userId) => {
   return getQuotaUsageForUser(userId);
 };
 
+exports.checkInReservation = async (user, reservationId, currentTime = new Date()) => {
+  const reservation = await Reservation.findById(reservationId);
+  if (!reservation) throw createError(404, "Reservation not found");
+  if (String(reservation.user) !== user.id) throw createError(403, "You can only check in to your own reservation");
+  if (reservation.status !== "approved") throw createError(409, "Only approved reservations can be checked in");
+
+  const window = getCheckInWindow(reservation.startTime);
+  if (currentTime < window.opensAt) {
+    throw createError(409, `Check-in opens ${window.earlyMinutes} minutes before the reservation`);
+  }
+  if (currentTime > window.closesAt || currentTime >= reservation.endTime) {
+    throw createError(409, "The check-in window has closed");
+  }
+
+  reservation.status = "check_in_pending";
+  reservation.checkInRequestedAt = currentTime;
+  reservation.lifecycleReason = "Waiting for administrator attendance confirmation";
+  await reservation.save();
+  await reservation.populate("user");
+  await reservation.populate("area");
+  return serializeReservation(reservation);
+};
+
+exports.confirmAttendance = async (adminUser, reservationId, currentTime = new Date()) => {
+  const reservation = await Reservation.findById(reservationId);
+  if (!reservation) throw createError(404, "Reservation not found");
+  if (reservation.status !== "check_in_pending") {
+    throw createError(409, "This reservation is not waiting for attendance confirmation");
+  }
+  if (currentTime >= reservation.endTime) throw createError(409, "This reservation has already ended");
+
+  reservation.status = "in_use";
+  reservation.attendanceConfirmedAt = currentTime;
+  reservation.attendanceConfirmedBy = adminUser.id;
+  reservation.lifecycleReason = "Attendance confirmed by administrator";
+  await reservation.save();
+  await reservation.populate("user");
+  await reservation.populate("area");
+  return serializeReservation(reservation);
+};
+
+exports.markNoShow = async (reservationId, currentTime = new Date()) => {
+  const reservation = await Reservation.findById(reservationId);
+  if (!reservation) throw createError(404, "Reservation not found");
+  if (!["approved", "check_in_pending"].includes(reservation.status)) {
+    throw createError(409, "This reservation cannot be marked as no-show");
+  }
+  if (currentTime < reservation.startTime) throw createError(409, "A future reservation cannot be marked as no-show");
+
+  reservation.status = "no_show";
+  reservation.noShowAt = currentTime;
+  reservation.lifecycleReason = "Marked no-show by administrator";
+  await reservation.save();
+  await reservation.populate("user");
+  await reservation.populate("area");
+  return serializeReservation(reservation);
+};
+
+exports.runLifecycleSweep = async (currentTime = new Date()) => {
+  const { graceMinutes } = getCheckInPolicy();
+  const noShowCutoff = new Date(currentTime.getTime() - graceMinutes * 60 * 1000);
+  const [expiredPending, noShows, unconfirmed, completed] = await Promise.all([
+    Reservation.updateMany(
+      { status: "pending", startTime: { $lte: currentTime } },
+      { $set: { status: "cancelled", lifecycleReason: "Automatically cancelled because approval was not completed before start" } }
+    ),
+    Reservation.updateMany(
+      { status: "approved", startTime: { $lte: noShowCutoff } },
+      { $set: { status: "no_show", noShowAt: currentTime, lifecycleReason: "Automatically marked no-show after the check-in grace period" } }
+    ),
+    Reservation.updateMany(
+      { status: "check_in_pending", endTime: { $lte: currentTime } },
+      { $set: { status: "no_show", noShowAt: currentTime, lifecycleReason: "Check-in was not confirmed before the reservation ended" } }
+    ),
+    Reservation.updateMany(
+      { status: "in_use", endTime: { $lte: currentTime } },
+      { $set: { status: "completed", completedAt: currentTime, lifecycleReason: "Reservation completed" } }
+    )
+  ]);
+
+  return {
+    expiredPending: expiredPending.modifiedCount,
+    noShows: noShows.modifiedCount + unconfirmed.modifiedCount,
+    completed: completed.modifiedCount,
+    changed: expiredPending.modifiedCount + noShows.modifiedCount + unconfirmed.modifiedCount + completed.modifiedCount
+  };
+};
+
 exports.createReservation = async (user, data) => {
   const areaId = data.areaId;
   const startTime = normalizeDate(data.startTime, "startTime");
@@ -377,40 +498,44 @@ exports.cancelReservation = async (user, reservationId, currentTime) => {
     throw createError(400, "Cannot cancel reservations that start in less than 6 hours");
   }
 
+  if (!["pending", "approved", "check_in_pending"].includes(reservation.status)) {
+    throw createError(409, "This reservation can no longer be cancelled");
+  }
   reservation.status = "cancelled";
+  reservation.lifecycleReason = "Cancelled by user or administrator";
   await reservation.save();
 
   return serializeReservation(reservation);
 };
 
 exports.approveReservation = async (reservationId) => {
-  const reservation = await Reservation.findByIdAndUpdate(
-    reservationId,
+  const reservation = await Reservation.findOneAndUpdate(
+    { _id: reservationId, status: "pending", startTime: { $gt: new Date() } },
     { status: "approved" },
     { new: true }
   )
     .populate("user")
     .populate("area");
 
-  if (!reservation) {
-    throw createError(404, "Reservation not found");
-  }
+  if (!reservation) throw createError(409, "Only future pending reservations can be approved");
 
   return serializeReservation(reservation);
 };
 
 exports.rejectReservation = async (reservationId) => {
-  const reservation = await Reservation.findByIdAndUpdate(
-    reservationId,
+  const reservation = await Reservation.findOneAndUpdate(
+    { _id: reservationId, status: "pending" },
     { status: "rejected" },
     { new: true }
   )
     .populate("user")
     .populate("area");
 
-  if (!reservation) {
-    throw createError(404, "Reservation not found");
-  }
+  if (!reservation) throw createError(409, "Only pending reservations can be rejected");
 
   return serializeReservation(reservation);
 };
+
+exports.getCheckInPolicy = getCheckInPolicy;
+exports.getCheckInWindow = getCheckInWindow;
+exports.ACTIVE_STATUSES = ACTIVE_STATUSES;

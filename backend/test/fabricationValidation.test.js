@@ -5,6 +5,7 @@ const {
   LASER_MATERIAL_OPTIONS,
   deriveLaserTitle,
   normalizeLaserMaterial,
+  calculateMaterialFee,
   serializeJob
 } = require("../src/services/fabrication.service");
 const FabricationJob = require("../src/models/fabricationJob.model");
@@ -21,6 +22,12 @@ test("laser material accepts only the four UI options", () => {
   assert.throws(() => normalizeLaserMaterial("10mm 木板"), /有效的雷切材料與厚度/);
 });
 
+test("3DP material fee is grams divided by two and rounded", () => {
+  assert.equal(calculateMaterialFee(12.5), 6);
+  assert.equal(calculateMaterialFee(13), 7);
+  assert.equal(calculateMaterialFee(null), null);
+});
+
 test("pickup acknowledgement fields are exposed to clients", () => {
   const collectedAt = new Date("2026-09-06T01:02:03.000Z");
   const result = serializeJob({
@@ -29,6 +36,7 @@ test("pickup acknowledgement fields are exposed to clients", () => {
     serviceType: "laser",
     title: "panel",
     status: "completed",
+    filamentGrams: 13,
     collectedAt,
     collectedBy: "admin-1",
     createdAt: collectedAt,
@@ -36,6 +44,8 @@ test("pickup acknowledgement fields are exposed to clients", () => {
   });
   assert.equal(result.collectedAt, collectedAt);
   assert.equal(result.collectedBy, "admin-1");
+  assert.equal(result.materialFee, 7);
+  assert.equal(serializeJob({ ...result, _id: "job-1" }, { public: true }).materialFee, undefined);
 });
 
 test("the owner can acknowledge physical collection of a completed job", async () => {

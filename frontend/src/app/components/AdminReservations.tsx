@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router";
-import { CheckCircle2, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, ShieldAlert, ShieldCheck, UserCheck, UserX, XCircle } from "lucide-react";
 import { useAuth } from "../auth";
 
 type AreaType = "meeting" | "soldering" | "3dp" | "heavy_processing";
-type ReservationStatus = "approved" | "pending" | "rejected" | "cancelled";
+type ReservationStatus = "approved" | "pending" | "check_in_pending" | "in_use" | "completed" | "no_show" | "rejected" | "cancelled";
 
 interface ReservationArea {
   id: string;
@@ -39,6 +39,9 @@ interface PendingReservation {
   startTime: string;
   endTime: string;
   status: ReservationStatus;
+  checkInRequestedAt?: string | null;
+  attendanceConfirmedAt?: string | null;
+  lifecycleReason?: string;
 }
 
 interface PendingReservationsResponse {
@@ -93,7 +96,7 @@ export function AdminReservations() {
 
   const isAdmin = user?.role === "admin";
   const pendingCount = useMemo(
-    () => reservations.filter((reservation) => reservation.status === "pending").length,
+    () => reservations.filter((reservation) => ["pending", "check_in_pending"].includes(reservation.status)).length,
     [reservations]
   );
 
@@ -106,10 +109,11 @@ export function AdminReservations() {
     }
 
     let cancelled = false;
+    let initialLoad = true;
 
     const loadPendingReservations = async () => {
       try {
-        if (!cancelled) {
+        if (!cancelled && initialLoad) {
           setLoading(true);
           setError(null);
         }
@@ -131,6 +135,7 @@ export function AdminReservations() {
 
         if (!cancelled) {
           setReservations(payload.reservations);
+          setError(null);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -140,13 +145,16 @@ export function AdminReservations() {
         if (!cancelled) {
           setLoading(false);
         }
+        initialLoad = false;
       }
     };
 
     void loadPendingReservations();
+    const interval = window.setInterval(loadPendingReservations, 15000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
     };
   }, [isAuthenticated, token, isAdmin]);
 
@@ -168,10 +176,11 @@ export function AdminReservations() {
     );
   }
 
-  const handleDecision = async (reservationId: string, action: "approve" | "reject") => {
+  const handleDecision = async (reservationId: string, action: "approve" | "reject" | "confirm-attendance" | "no-show") => {
     if (!token) {
       return;
     }
+    if (action === "no-show" && !window.confirm("確定使用者未實際到場？此操作會立即釋放預約容量。")) return;
 
     try {
       setActingReservationId(reservationId);
@@ -191,8 +200,10 @@ export function AdminReservations() {
       if (!response.ok) {
         throw new Error(await readApiError(response));
       }
-
-      setReservations((current) => current.filter((reservation) => reservation.id !== reservationId));
+      const payload = await response.json() as { reservation?: PendingReservation };
+      setReservations((current) => action === "confirm-attendance" && payload.reservation
+        ? current.map((reservation) => reservation.id === reservationId ? payload.reservation! : reservation)
+        : current.filter((reservation) => reservation.id !== reservationId));
     } catch (decisionError) {
       setActionError(decisionError instanceof Error ? decisionError.message : "Failed to update reservation status");
     } finally {
@@ -209,18 +220,18 @@ export function AdminReservations() {
             <h1 className="text-2xl font-semibold text-slate-100">Admin Reservation Review</h1>
           </div>
           <p className="text-sm text-slate-400 mt-2">
-            Review pending MakerSpace reservations and approve or reject them.
+            Review booking requests and verify that checked-in users are physically using the MakerSpace.
           </p>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-right">
-          <div className="text-xs uppercase tracking-widest text-slate-500">Pending Queue</div>
+          <div className="text-xs uppercase tracking-widest text-slate-500">Action Required</div>
           <div className="text-2xl font-semibold text-slate-100 mt-1">{pendingCount}</div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-4">
-          <div className="text-sm font-medium text-slate-300">Pending Reservations</div>
+          <div className="text-sm font-medium text-slate-300">Reservation & Attendance Operations</div>
           <Link to="/" className="text-sm text-emerald-400 hover:text-emerald-300">
             Back to dashboard
           </Link>
@@ -233,7 +244,7 @@ export function AdminReservations() {
             {error}
           </div>
         ) : reservations.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-slate-400">No pending reservations right now.</div>
+          <div className="px-5 py-6 text-sm text-slate-400">No reservations currently require monitoring.</div>
         ) : (
           <div className="divide-y divide-slate-800">
             {reservations.map((reservation) => (
@@ -244,8 +255,8 @@ export function AdminReservations() {
                 <div className="min-w-0 space-y-2">
                   <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-base font-semibold text-slate-100">{reservation.area.name}</h2>
-                    <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-200">
-                      Pending
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${reservation.status === "check_in_pending" ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-200" : reservation.status === "in_use" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : reservation.status === "approved" ? "border-sky-500/30 bg-sky-500/10 text-sky-200" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>
+                      {reservation.status === "check_in_pending" ? "待確認報到" : reservation.status === "in_use" ? "使用中" : reservation.status === "approved" ? "已核准／待報到" : "等待審核"}
                     </span>
                   </div>
                   <p className="text-sm text-slate-300">
@@ -272,27 +283,22 @@ export function AdminReservations() {
                       When2meet: {reservation.when2meet}
                     </p>
                   ) : null}
+                  {reservation.checkInRequestedAt ? (
+                    <p className="text-sm text-cyan-300 flex items-center gap-2"><Clock3 className="w-4 h-4" />使用者於 {formatReservationDate(reservation.checkInRequestedAt)} 提交報到</p>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleDecision(reservation.id, "reject")}
-                    disabled={actingReservationId === reservation.id}
-                    className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDecision(reservation.id, "approve")}
-                    disabled={actingReservationId === reservation.id}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Approve
-                  </button>
+                  {reservation.status === "pending" ? <>
+                    <button type="button" onClick={() => handleDecision(reservation.id, "reject")} disabled={actingReservationId === reservation.id} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-60"><XCircle className="w-4 h-4" />Reject</button>
+                    <button type="button" onClick={() => handleDecision(reservation.id, "approve")} disabled={actingReservationId === reservation.id} className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60"><CheckCircle2 className="w-4 h-4" />Approve</button>
+                  </> : null}
+                  {reservation.status === "check_in_pending" ? <>
+                    <button type="button" onClick={() => handleDecision(reservation.id, "no-show")} disabled={actingReservationId === reservation.id} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-60"><UserX className="w-4 h-4" />No-show</button>
+                    <button type="button" onClick={() => handleDecision(reservation.id, "confirm-attendance")} disabled={actingReservationId === reservation.id} className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60"><UserCheck className="w-4 h-4" />確認實際使用</button>
+                  </> : null}
+                  {reservation.status === "approved" && new Date() >= new Date(reservation.startTime) ? <button type="button" onClick={() => handleDecision(reservation.id, "no-show")} disabled={actingReservationId === reservation.id} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-60"><UserX className="w-4 h-4" />No-show</button> : null}
+                  {reservation.status === "in_use" ? <span className="inline-flex items-center gap-2 px-3 py-2 text-sm text-emerald-300"><UserCheck className="w-4 h-4" />已確認使用中</span> : null}
                 </div>
               </div>
             ))}

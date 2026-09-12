@@ -18,7 +18,7 @@ const SLOT_ALIGNMENT_MINUTES = 30;
 const DEFAULT_AVAILABILITY_DAYS = 5;
 const MAX_AVAILABILITY_DAYS = 10;
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const ACTIVE_RESERVATION_STATUSES = ["approved", "pending"];
+const ACTIVE_RESERVATION_STATUSES = ["approved", "pending", "check_in_pending", "in_use"];
 
 function toAreaPayload(area) {
   return {
@@ -171,11 +171,11 @@ async function buildAreaStatus(area, currentTime) {
 }
 
 exports.getAllAreasInfo = async () => {
-  return await Area.find().sort({ createdAt: 1 }).lean();
+  return await Area.find({ isActive: true }).sort({ createdAt: 1 }).lean();
 };
 
 exports.getAreaStatus = async (currentTime) => {
-  const areas = await Area.find().sort({ createdAt: 1 }).lean();
+  const areas = await Area.find({ isActive: true }).sort({ createdAt: 1 }).lean();
   return await Promise.all(areas.map((area) => buildAreaStatus(area, currentTime)));
 };
 
@@ -189,7 +189,10 @@ exports.getSingleAreaStatus = async (areaId, currentTime) => {
   return await buildAreaStatus(area, currentTime);
 };
 
-exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
+exports.getAreaAvailability = async (
+  areaId,
+  { startDate, days, includeReservationDetails = false } = {}
+) => {
   const area = await Area.findById(areaId).lean();
   if (!area) {
     return null;
@@ -210,16 +213,24 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
   const dates = getNextWeekdays(firstDate, totalDays);
   const dayNumbers = [...new Set(dates.map((date) => getBusinessDayOfWeek(date)))];
 
-  const [openingHours, reservations] = await Promise.all([
-    OpeningHour.find({ dayOfWeek: { $in: dayNumbers }, isOpen: true }).lean(),
-    Reservation.find({
+  const reservationQuery = Reservation.find({
       area: area._id,
       status: { $in: ACTIVE_RESERVATION_STATUSES },
       startTime: { $lt: endOfBusinessDay(dates[dates.length - 1]) },
       endTime: { $gt: startOfBusinessDay(dates[0]) },
-    })
-      .select("startTime endTime participantCount")
-      .lean(),
+    }).select(
+      includeReservationDetails
+        ? "user purpose project status startTime endTime participantCount"
+        : "startTime endTime participantCount"
+    );
+
+  if (includeReservationDetails) {
+    reservationQuery.populate("user", "name");
+  }
+
+  const [openingHours, reservations] = await Promise.all([
+    OpeningHour.find({ dayOfWeek: { $in: dayNumbers }, isOpen: true }).lean(),
+    reservationQuery.lean(),
   ]);
 
   const openingHoursByDay = new Map();
@@ -230,7 +241,7 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
     openingHoursByDay.get(entry.dayOfWeek).push(entry);
   }
 
-  return {
+  const response = {
     area: toAreaPayload(area),
     dates: dates.map((date) => {
       const dayOfWeek = getBusinessDayOfWeek(date);
@@ -246,15 +257,17 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
           const slotEnd = setTimeOnBusinessDate(date, slotRange.endMinutes);
           const isOpen = area.isActive;
 
-          const occupiedCount = reservations.reduce((sum, reservation) => {
-            return overlaps(slotStart, slotEnd, new Date(reservation.startTime), new Date(reservation.endTime))
-              ? sum + (reservation.participantCount || 0)
-              : sum;
-          }, 0);
+          const overlappingReservations = reservations.filter((reservation) =>
+            overlaps(slotStart, slotEnd, new Date(reservation.startTime), new Date(reservation.endTime))
+          );
+          const occupiedCount = overlappingReservations.reduce(
+            (sum, reservation) => sum + (reservation.participantCount || 0),
+            0
+          );
 
           const remainingCapacity = Math.max(area.maxCapacity - occupiedCount, 0);
 
-          return {
+          const slot = {
             time: slotRange.time,
             endTime: slotRange.endTime,
             isOpen,
@@ -263,8 +276,28 @@ exports.getAreaAvailability = async (areaId, { startDate, days } = {}) => {
             isFull: isOpen && remainingCapacity === 0,
             hasReservation: occupiedCount > 0,
           };
+
+          if (includeReservationDetails) {
+            slot.reservationIds = overlappingReservations.map((reservation) => String(reservation._id));
+          }
+
+          return slot;
         }),
       };
     }),
   };
+
+  if (includeReservationDetails) {
+    response.reservations = reservations.map((reservation) => ({
+      id: String(reservation._id),
+      userName: reservation.user?.name || "Maker",
+      purpose: reservation.purpose || reservation.project || "MakerSpace 借用",
+      status: reservation.status,
+      startTime: reservation.startTime,
+      endTime: reservation.endTime,
+      participantCount: reservation.participantCount,
+    }));
+  }
+
+  return response;
 };

@@ -61,13 +61,31 @@ const reservationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["approved", "pending", "rejected", "cancelled"],
+      enum: [
+        "approved",
+        "pending",
+        "check_in_pending",
+        "in_use",
+        "completed",
+        "no_show",
+        "rejected",
+        "cancelled"
+      ],
       default: "pending"
-    }
+    },
+    checkInRequestedAt: { type: Date, default: null },
+    attendanceConfirmedAt: { type: Date, default: null },
+    attendanceConfirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    noShowAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null },
+    lifecycleReason: { type: String, default: "", trim: true }
   },
   {
     timestamps: true
   }
 );
+
+reservationSchema.index({ status: 1, startTime: 1 });
+reservationSchema.index({ status: 1, endTime: 1 });
 
 module.exports = mongoose.model("Reservation", reservationSchema);

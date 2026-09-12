@@ -82,6 +82,14 @@ function serializeReservation(reservation) {
     startTime: source.startTime,
     endTime: source.endTime,
     status: source.status,
+    checkInRequestedAt: source.checkInRequestedAt,
+    attendanceConfirmedAt: source.attendanceConfirmedAt,
+    attendanceConfirmedBy: source.attendanceConfirmedBy
+      ? String(source.attendanceConfirmedBy._id ?? source.attendanceConfirmedBy)
+      : null,
+    noShowAt: source.noShowAt,
+    completedAt: source.completedAt,
+    lifecycleReason: source.lifecycleReason ?? "",
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
@@ -203,7 +211,7 @@ exports.deleteUser = async (userId) => {
   // Check for active reservations
   const activeReservationsCount = await Reservation.countDocuments({
     user: userId,
-    status: { $in: ["pending", "approved"] },
+    status: { $in: ["pending", "approved", "check_in_pending", "in_use"] },
   });
 
   if (activeReservationsCount > 0) {
@@ -218,7 +226,17 @@ exports.deleteUser = async (userId) => {
 };
 
 exports.getPendingReservations = async () => {
-  const reservations = await Reservation.find({ status: "pending" })
+  const now = new Date();
+  const configuredEarlyMinutes = Number.parseInt(process.env.RESERVATION_CHECK_IN_EARLY_MINUTES ?? "", 10);
+  const earlyMinutes = Number.isInteger(configuredEarlyMinutes) && configuredEarlyMinutes >= 0 ? configuredEarlyMinutes : 15;
+  const attendanceWindowEnd = new Date(now.getTime() + earlyMinutes * 60 * 1000);
+  const reservations = await Reservation.find({
+    $or: [
+      { status: "pending" },
+      { status: "approved", startTime: { $lte: attendanceWindowEnd }, endTime: { $gt: now } },
+      { status: { $in: ["check_in_pending", "in_use"] }, endTime: { $gt: now } }
+    ]
+  })
     .populate("user")
     .populate("area")
     .sort({ startTime: 1, createdAt: 1 })

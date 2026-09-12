@@ -9,6 +9,7 @@ router.get("/my", authenticate, reservationController.getMyReservations);
 router.get("/quota", authenticate, reservationController.getMyReservationQuota);
 router.post("/", authenticate, reservationController.createReservation);
 router.patch("/:id", authenticate, reservationController.updateReservation);
+router.post("/:id/check-in", authenticate, reservationController.checkInReservation);
 router.delete("/:id", authenticate, reservationController.cancelReservation);
 
 module.exports = router;

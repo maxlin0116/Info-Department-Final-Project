@@ -12,6 +12,8 @@ const reservationRoutes = require("./routes/reservation.routes");
 const adminRoutes = require("./routes/admin.routes");
 const fabricationRoutes = require("./routes/fabrication.routes");
 const displayRoutes = require("./routes/display.routes");
+const reservationService = require("./services/reservation.service");
+const { publishDisplayChange } = require("./services/displayEvents.service");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -156,6 +158,20 @@ app.use((error, _req, res, _next) => {
 
 connectDatabase()
   .then(() => {
+    const sweepReservations = async () => {
+      try {
+        const result = await reservationService.runLifecycleSweep(new Date());
+        if (result.changed > 0) publishDisplayChange("reservation_lifecycle_updated");
+      } catch (error) {
+        console.error("Reservation lifecycle sweep failed", error);
+      }
+    };
+    void sweepReservations();
+    const lifecycleInterval = setInterval(
+      sweepReservations,
+      Number(process.env.RESERVATION_LIFECYCLE_POLL_MS || 30000)
+    );
+    lifecycleInterval.unref();
     app.listen(port, () => {
       console.log("Server is running on port " + port);
     });

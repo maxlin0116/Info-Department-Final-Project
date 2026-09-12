@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from "react-router";
-import { Cpu, KeyRound } from "lucide-react";
+import { CalendarDays, Cpu, Home, KeyRound, Printer, Scissors } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
 
@@ -13,6 +13,15 @@ export function Layout() {
     location.pathname === "/reset-password" ||
     location.pathname === "/privacy";
   const shouldReduceMotion = useReducedMotion();
+  const primaryTabs = [
+    { to: "/", label: "首頁", icon: Home },
+    { to: "/reserve", label: "預約空間", icon: CalendarDays },
+    { to: "/fabrication/3dp", label: "3DP", icon: Printer },
+    { to: "/fabrication/laser", label: "雷切", icon: Scissors },
+  ];
+
+  const isPrimaryTabActive = (path: string) =>
+    path === "/" ? location.pathname === "/" : location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   return (
     <div className="min-h-screen bg-[#020617] text-[#F8FAFC] font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
@@ -38,7 +47,7 @@ export function Layout() {
 
             {!isAuthPage ? (
               <div className="flex items-center gap-3 shrink-0">
-                <Link to="/fabrication/queues" className="hidden md:block text-xs font-mono text-slate-400 hover:text-emerald-300">QUEUES</Link>
+                <Link to="/fabrication/queues" className="hidden md:block text-sm font-mono text-slate-400 hover:text-emerald-300">QUEUES</Link>
                 {isAuthenticated && user ? (
                   <>
                     <Link to="/fabrication/jobs" className="hidden md:block text-xs font-mono text-slate-400 hover:text-emerald-300">MY_JOBS</Link>
@@ -94,6 +103,28 @@ export function Layout() {
               </div>
             ) : null}
           </div>
+          {!isAuthPage ? (
+            <nav aria-label="主要功能" className="flex items-center gap-1 overflow-x-auto border-t border-slate-800/80 py-2 custom-scrollbar">
+              {primaryTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = isPrimaryTabActive(tab.to);
+                return (
+                  <Link
+                    key={tab.to}
+                    to={tab.to}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                      active
+                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                        : "border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : null}
         </div>
       </motion.header>
 

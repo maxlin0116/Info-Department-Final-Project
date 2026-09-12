@@ -71,3 +71,13 @@ exports.cancelReservation = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.checkInReservation = async (req, res, next) => {
+  try {
+    const reservation = await reservationService.checkInReservation(req.user, req.params.id, new Date());
+    publishDisplayChange("reservation_check_in_requested");
+    res.status(200).json({ message: "Check-in submitted for administrator confirmation", reservation });
+  } catch (error) {
+    next(error);
+  }
+};

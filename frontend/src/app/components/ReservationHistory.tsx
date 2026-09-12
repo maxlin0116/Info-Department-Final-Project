@@ -32,7 +32,8 @@ interface ReservationItem {
   project: string;
   startTime: string;
   endTime: string;
-  status: "approved" | "pending" | "rejected" | "cancelled";
+  status: "approved" | "pending" | "check_in_pending" | "in_use" | "completed" | "no_show" | "rejected" | "cancelled";
+  lifecycleReason?: string;
 }
 
 interface HistoryProps {
@@ -60,6 +61,10 @@ const getReservationStatusLabel = (reservation: ReservationItem, now: Date) => {
   if (reservation.status === "cancelled") return "Cancelled";
   if (reservation.status === "rejected") return "Rejected";
   if (reservation.status === "pending") return "Pending";
+  if (reservation.status === "check_in_pending") return "Check-in Pending";
+  if (reservation.status === "in_use") return "In Use";
+  if (reservation.status === "completed") return "Completed";
+  if (reservation.status === "no_show") return "No-show";
 
   const startTime = new Date(reservation.startTime);
   const endTime = new Date(reservation.endTime);
@@ -73,10 +78,13 @@ const getReservationStatusClassName = (status: string) => {
   switch (status) {
     case "Upcoming": return "text-sky-300 bg-sky-500/10 border-sky-500/30";
     case "In Progress": return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
+    case "In Use": return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
+    case "Check-in Pending": return "text-cyan-300 bg-cyan-500/10 border-cyan-500/30";
     case "Completed": return "text-slate-300 bg-slate-500/10 border-slate-500/30";
     case "Pending": return "text-amber-300 bg-amber-500/10 border-amber-500/30";
     case "Rejected": return "text-rose-300 bg-rose-500/10 border-rose-500/30";
     case "Cancelled": return "text-slate-400 bg-slate-800/70 border-slate-700";
+    case "No-show": return "text-rose-300 bg-rose-500/10 border-rose-500/30";
     default: return "text-slate-300 bg-slate-500/10 border-slate-500/30";
   }
 };
@@ -95,6 +103,8 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
       .filter((r) => 
         r.status === "cancelled" || 
         r.status === "rejected" || 
+        r.status === "no_show" ||
+        r.status === "completed" ||
         r.derivedStatus === "Completed"
       );
   }, [reservations, now]);
@@ -167,6 +177,7 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
                     </p>
                     {reservation.purpose && <p className="text-[11px] text-slate-500 italic">"{reservation.purpose}"</p>}
                   </div>
+                  {reservation.lifecycleReason ? <p className="mt-1 text-[10px] text-slate-600 font-mono">{reservation.lifecycleReason}</p> : null}
                 </div>
                 <div className="text-[10px] text-slate-700 font-mono lg:text-right">
                   ID: {reservation.id.slice(-8)}

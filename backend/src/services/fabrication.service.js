@@ -37,6 +37,12 @@ function serializeUser(user) {
   return { id: String(user._id ?? user.id), name: user.name, grade: user.grade };
 }
 
+function calculateMaterialFee(filamentGrams) {
+  if (filamentGrams === null || filamentGrams === undefined || filamentGrams === "") return null;
+  const grams = Number(filamentGrams);
+  return Number.isFinite(grams) && grams >= 0 ? Math.round(grams / 2) : null;
+}
+
 function serializeJob(job, options = {}) {
   const source = typeof job.toObject === "function" ? job.toObject() : job;
   return {
@@ -53,6 +59,7 @@ function serializeJob(job, options = {}) {
     estimatedSeconds: source.estimatedSeconds,
     estimatedMinutes: source.estimatedMinutes,
     filamentGrams: source.filamentGrams,
+    materialFee: options.public ? undefined : calculateMaterialFee(source.filamentGrams),
     layerCount: source.layerCount,
     requestedColor: source.requestedColor || "",
     assignedColor: source.assignedColor || "",
@@ -96,17 +103,63 @@ function parseSliceSettings(value) {
     try { source = JSON.parse(value); } catch { throw createError(400, "Invalid slice settings"); }
   }
   source = source || {};
+  const numberInRange = (key, fallback, min, max) => {
+    const parsed = Number(source[key] ?? fallback);
+    if (!Number.isFinite(parsed) || parsed < min || parsed > max) throw createError(400, `Invalid ${key}`);
+    return parsed;
+  };
+  const enumValue = (key, fallback, allowed) => {
+    const parsed = String(source[key] ?? fallback);
+    if (!allowed.includes(parsed)) throw createError(400, `Invalid ${key}`);
+    return parsed;
+  };
+  const booleanValue = (key, fallback = false) => source[key] === undefined
+    ? fallback
+    : source[key] === true || source[key] === "true" || source[key] === 1 || source[key] === "1";
+  const brimType = enumValue(
+    "brimType",
+    booleanValue("brimEnabled") ? "auto_brim" : "no_brim",
+    ["no_brim", "auto_brim", "outer_only", "inner_only", "outer_and_inner"]
+  );
   return {
-    scalePercent: Number(source.scalePercent || 100),
-    rotationX: Number(source.rotationX || 0),
-    rotationY: Number(source.rotationY || 0),
-    rotationZ: Number(source.rotationZ || 0),
-    layerHeight: Number(source.layerHeight || 0.2),
-    infillPercent: Number(source.infillPercent ?? 15),
-    infillPattern: source.infillPattern || "grid",
-    supportType: source.supportType || "none",
-    brimEnabled: source.brimEnabled === true || source.brimEnabled === "true",
-    autoOrient: source.autoOrient === true || source.autoOrient === "true"
+    scalePercent: numberInRange("scalePercent", 100, 10, 400),
+    rotationX: numberInRange("rotationX", 0, -360, 360),
+    rotationY: numberInRange("rotationY", 0, -360, 360),
+    rotationZ: numberInRange("rotationZ", 0, -360, 360),
+    layerHeight: numberInRange("layerHeight", 0.2, 0.08, 0.28),
+    initialLayerHeight: numberInRange("initialLayerHeight", 0.2, 0.08, 0.4),
+    wallGenerator: enumValue("wallGenerator", "classic", ["classic", "arachne"]),
+    seamPosition: enumValue("seamPosition", "aligned", ["aligned", "nearest", "back", "random"]),
+    sliceClosingRadius: numberInRange("sliceClosingRadius", 0.049, 0, 1),
+    resolution: numberInRange("resolution", 0.012, 0.001, 1),
+    arcFitting: booleanValue("arcFitting", true),
+    preciseZHeight: booleanValue("preciseZHeight"),
+    xyContourCompensation: numberInRange("xyContourCompensation", 0, -2, 2),
+    xyHoleCompensation: numberInRange("xyHoleCompensation", 0, -2, 2),
+    elephantFootCompensation: numberInRange("elephantFootCompensation", 0.15, 0, 1),
+    wallLoops: numberInRange("wallLoops", 2, 1, 10),
+    topShellLayers: numberInRange("topShellLayers", 5, 0, 20),
+    bottomShellLayers: numberInRange("bottomShellLayers", 3, 0, 20),
+    infillPercent: numberInRange("infillPercent", 15, 0, 100),
+    infillPattern: enumValue("infillPattern", "grid", ["grid", "gyroid", "honeycomb", "rectilinear", "cubic", "adaptivecubic", "lightning"]),
+    outerWallSpeed: numberInRange("outerWallSpeed", 200, 10, 500),
+    innerWallSpeed: numberInRange("innerWallSpeed", 300, 10, 500),
+    infillSpeed: numberInRange("infillSpeed", 270, 10, 500),
+    topSurfaceSpeed: numberInRange("topSurfaceSpeed", 200, 10, 500),
+    travelSpeed: numberInRange("travelSpeed", 500, 10, 700),
+    supportType: enumValue("supportType", "none", ["none", "normal-auto", "tree-auto", "normal-manual", "tree-manual"]),
+    supportThresholdAngle: numberInRange("supportThresholdAngle", 30, 0, 90),
+    supportOnBuildPlateOnly: booleanValue("supportOnBuildPlateOnly"),
+    supportXyDistance: numberInRange("supportXyDistance", 0.4, 0, 2),
+    supportTopZDistance: numberInRange("supportTopZDistance", 0.2, 0, 1),
+    brimType,
+    brimEnabled: brimType !== "no_brim",
+    brimWidth: numberInRange("brimWidth", 5, 0, 30),
+    brimObjectGap: numberInRange("brimObjectGap", 0.1, 0, 2),
+    ironingType: enumValue("ironingType", "no ironing", ["no ironing", "top", "topmost", "all solid"]),
+    ironingFlow: numberInRange("ironingFlow", 10, 1, 100),
+    ironingSpeed: numberInRange("ironingSpeed", 30, 1, 150),
+    autoOrient: booleanValue("autoOrient")
   };
 }
 
@@ -436,6 +489,7 @@ module.exports = {
   acknowledgeCollection,
   deriveLaserTitle,
   normalizeLaserMaterial,
+  calculateMaterialFee,
   LASER_MATERIAL_OPTIONS,
   getConfig,
   updateConfig

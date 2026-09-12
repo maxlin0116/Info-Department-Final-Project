@@ -35,6 +35,8 @@ The current codebase already includes the following end-to-end features:
 - Reservation history separated from active reservations on the dashboard
 - 6-hour cancellation restriction for regular users
 - Admin review page for approving or rejecting pending reservations
+- MakerSpace user check-in with administrator attendance confirmation
+- Automatic no-show handling after a configurable grace period, releasing reserved capacity
 - STL/3MF upload, browser model preview, basic Bambu-style print settings, and server-side P1S slicing
 - Monthly 3DP quota accounting by estimated print minutes (default 600 minutes, admin configurable)
 - Four-slot AMS color selection with admin reassignment
@@ -45,17 +47,32 @@ The current codebase already includes the following end-to-end features:
 
 ## Fabrication Workflow
 
-3DP and laser are queue services; Meeting Area and Soldering Table continue to use time-slot reservations.
+3DP and laser are queue services; MakerSpace is the single time-slot reservation resource. The legacy Soldering Table is retired and retained only in historical records.
+
+### MakerSpace attendance
+
+```txt
+pending -> approved -> user check-in -> admin attendance confirmation -> in use -> completed
+                    \-> no check-in after grace period -> no-show / capacity released
+```
+
+- Check-in opens 15 minutes before the reservation by default.
+- An approved reservation is automatically marked `no_show` 15 minutes after its start if the user has not checked in.
+- A pending reservation is automatically cancelled when its start time passes without approval.
+- The administrator confirms physical attendance before the reservation becomes `in_use`.
 
 ### 3DP
 
 ```txt
-upload STL/3MF -> adjust scale/layer/infill/support/brim -> Linux worker slices
+upload STL/3MF -> import embedded Bambu settings -> adjust quality/strength/speed/support/other -> Linux worker slices
 -> review estimated time -> choose an available AMS slot/color -> admin review
 -> FIFO queue -> running -> completed/failed -> physical collection acknowledgement
 ```
 
 - Target profile: one Bambu Lab P1S, stock 0.4 mm nozzle, Bambu PLA Basic.
+- Bambu Studio 3MF project settings are read in the browser and mapped to the server's allow-listed P1S slicing controls. Embedded object transforms remain intact; STL files use the safe defaults.
+- The preview uses a light Bambu-style workspace, a dark build plate, and live scale/orientation/brim feedback.
+- After slicing, the material fee is `round(total filament grams / 2)` and is shown to the owner and administrators.
 - Quota is reserved when the user confirms the estimate and consumed when the admin starts the job.
 - Cancelling or rejecting a not-yet-started job returns reserved quota.
 - The generated `.gcode.3mf` is available to the owner and admins.
@@ -72,8 +89,12 @@ Laser quota is disabled by default. If an admin enables it, the manually entered
 
 ### Admin and public display
 
+- `/`: read-only home overview with the five-day MakerSpace schedule and current 3DP/laser execution state.
+- `/reserve`: interactive MakerSpace reservation calendar and the signed-in user's active reservations.
+- `/fabrication/3dp`: 3DP upload, slicing settings, estimate, color selection, and queue submission.
+- `/fabrication/laser`: DXF upload and administrator-estimated laser queue submission.
 - `/admin/users`: manages student and admin accounts, issues temporary passwords, updates roles, suspends or deletes accounts.
-- `/admin/reservations`: reviews, approves, or rejects pending space reservations.
+- `/admin/reservations`: reviews reservations and confirms physical attendance or no-show status.
 - `/admin/fabrication`: estimates laser jobs, reviews 3DP, changes AMS assignment, manages machines/colors/quotas, and advances job states.
 - `/fabrication/jobs`: a user's own jobs and current 3DP quota.
 - `/fabrication/queues`: public queue view.
@@ -112,8 +133,7 @@ Reservations are separated by area. Each area can have its own reservation limit
 
 | Area | Description | Reservation Limit |
 | --- | --- | --- |
-| Meeting Area | Used for meetings, discussions, and group work | Based on the meeting area's capacity |
-| Soldering Table | Used for soldering and electronics work | 8 seats |
+| MakerSpace | General project work, discussion, and equipment use | 8 people by default |
 | 3DP Area | Used for 3D printing | Based on printer availability; users can also check whether someone is currently printing |
 | Heavy Processing Area | Used for heavier machining or processing work | Based on equipment availability and safety rules |
 
@@ -138,7 +158,7 @@ PORT=8000
 MONGODB_URI=<your mongodb connection string>
 JWT_SECRET=<your jwt secret>
 ADMIN_ACCESS_PASSWORD=<your admin access password>
-RESERVATION_QUOTA_LIMIT=16
+RESERVATION_QUOTA_LIMIT=64
 FRONTEND_ORIGIN=http://localhost:5173
 MAIL_PROVIDER=gmail_api
 GMAIL_CLIENT_ID=<your google oauth client id>
@@ -358,7 +378,7 @@ NODE_VERSION=20
 MONGODB_URI=<your MongoDB Atlas connection string>
 JWT_SECRET=<long random string>
 ADMIN_ACCESS_PASSWORD=<admin shared access password>
-RESERVATION_QUOTA_LIMIT=16
+RESERVATION_QUOTA_LIMIT=64
 AUTO_SEED_DATA=true
 FRONTEND_ORIGIN=https://<your-vercel-domain>
 FRONTEND_ORIGINS=
@@ -681,7 +701,7 @@ Update at least:
 ```txt
 JWT_SECRET=<long-random-secret>
 ADMIN_ACCESS_PASSWORD=<admin-password>
-RESERVATION_QUOTA_LIMIT=16
+RESERVATION_QUOTA_LIMIT=64
 FRONTEND_ORIGIN=https://your-domain.ntuee.org
 MAIL_PROVIDER=gmail_api
 GMAIL_CLIENT_ID=<your google oauth client id>
@@ -1092,6 +1112,7 @@ GET    /api/reservations/my
 GET    /api/reservations/quota
 POST   /api/reservations
 PATCH  /api/reservations/:id
+POST   /api/reservations/:id/check-in
 DELETE /api/reservations/:id
 ```
 
@@ -1103,6 +1124,8 @@ PATCH /api/admin/users/:id/role
 GET   /api/admin/reservations/pending
 PATCH /api/admin/reservations/:id/approve
 PATCH /api/admin/reservations/:id/reject
+PATCH /api/admin/reservations/:id/confirm-attendance
+PATCH /api/admin/reservations/:id/no-show
 ```
 
 ## Current Area Status Logic

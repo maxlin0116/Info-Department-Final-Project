@@ -5,7 +5,7 @@ const connectDatabase = require("./db");
 const Area = require("../models/area.model");
 const OpeningHour = require("../models/openingHour.model");
 const { ensureFabricationDefaults } = require("../services/fabricationConfig.service");
-const { areas } = require("./seedAreas");
+const { areas, retireLegacySolderingAreas } = require("./seedAreas");
 const { openingHours } = require("./seedOpeningHours");
 
 dotenv.config();
@@ -39,20 +39,16 @@ async function ensureSeedData() {
     await ensureCollectionData(Area, "Areas", areas);
     await ensureCollectionData(OpeningHour, "Opening hours", openingHours);
     for (const area of areas) {
-      const { bookingMode, serviceType, publicDisplayEnabled, ...insertDefaults } = area;
       await Area.updateOne(
         { type: area.type },
-        {
-          $set: {
-            bookingMode,
-            serviceType,
-            publicDisplayEnabled
-          },
-          $setOnInsert: insertDefaults
-        },
+        { $set: area },
         { upsert: true, setDefaultsOnInsert: true }
       );
     }
+
+    // Preserve legacy soldering records for history, but remove the resource
+    // from all current reservation views and release any future capacity.
+    await retireLegacySolderingAreas();
     await ensureFabricationDefaults();
   } finally {
     await mongoose.disconnect();

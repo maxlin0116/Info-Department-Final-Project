@@ -6,6 +6,8 @@ import { apiUrl, authHeaders, readApi } from "../api";
 import type { AmsSlot, FabricationConfig, FabricationJob, ServiceType } from "../fabricationTypes";
 import { formatMinutes } from "../fabricationTypes";
 import { ThreeModelPreview } from "./ThreeModelPreview";
+import { ThreeDpSettingsPanel } from "./ThreeDpSettingsPanel";
+import { DEFAULT_THREE_DP_SETTINGS, readThreeMfSettings, type ThreeDpSettings, type ThreeMfImportInfo } from "../threeDpSettings";
 
 const fieldClass = "w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500";
 const labelClass = "block text-[11px] uppercase tracking-wider text-slate-400 font-mono mb-1.5";
@@ -38,12 +40,14 @@ function SliceResult({ job, slots, token, onConfirmed }: { job: FabricationJob; 
         <CheckCircle2 className="w-6 h-6 text-emerald-400" />
         <div><h2 className="font-mono text-lg text-slate-100">切片完成</h2><p className="text-sm text-slate-400">{job.slicerProfileVersion}</p></div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Metric label="總預估時間" value={formatMinutes(job.estimatedMinutes)} />
         <Metric label="Quota 扣除" value={`${job.estimatedMinutes ?? 0} min`} />
-        <Metric label="預估材料" value={job.filamentGrams ? `${job.filamentGrams.toFixed(1)} g` : "—"} />
+        <Metric label="總消耗克數" value={job.filamentGrams != null ? `${job.filamentGrams.toFixed(1)} g` : "—"} />
+        <Metric label="材料費" value={job.materialFee != null ? `NT$ ${job.materialFee}` : "—"} />
         <Metric label="Layer" value={job.layerCount ? String(job.layerCount) : "—"} />
       </div>
+      <p className="text-xs text-slate-400">材料費按總耗材克數 ÷ 2 後四捨五入計算。</p>
       <div>
         <div className={labelClass}>選擇目前 AMS 顏色（單色列印）</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -77,13 +81,10 @@ export function FabricationSubmit() {
   const [title, setTitle] = useState("");
   const [comment, setComment] = useState("");
   const [material, setMaterial] = useState(laserMaterialOptions[0]);
-  const [scalePercent, setScalePercent] = useState(100);
-  const [layerHeight, setLayerHeight] = useState(0.2);
-  const [infillPercent, setInfillPercent] = useState(15);
-  const [infillPattern, setInfillPattern] = useState("grid");
-  const [supportType, setSupportType] = useState("none");
-  const [brimEnabled, setBrimEnabled] = useState(false);
-  const [autoOrient, setAutoOrient] = useState(false);
+  const [printSettings, setPrintSettings] = useState<ThreeDpSettings>({ ...DEFAULT_THREE_DP_SETTINGS });
+  const [importInfo, setImportInfo] = useState<ThreeMfImportInfo | null>(null);
+  const [importStatus, setImportStatus] = useState<"idle" | "reading" | "imported" | "not-found" | "error">("idle");
+  const [importMessage, setImportMessage] = useState("");
   const [config, setConfig] = useState<FabricationConfig | null>(null);
   const [job, setJob] = useState<FabricationJob | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -110,6 +111,37 @@ export function FabricationSubmit() {
   const accepts = serviceType === "3dp" ? ".stl,.3mf" : ".dxf";
   const machine = useMemo(() => config?.machines.find((item) => item.serviceType === serviceType), [config, serviceType]);
 
+  const chooseFile = async (selectedFile: File | null) => {
+    setFile(selectedFile);
+    setJob(null);
+    setError("");
+    setImportInfo(null);
+    setPrintSettings({ ...DEFAULT_THREE_DP_SETTINGS });
+    if (!selectedFile || serviceType !== "3dp") {
+      setImportStatus("idle");
+      setImportMessage("");
+      return;
+    }
+    if (!title.trim()) setTitle(selectedFile.name.replace(/\.(stl|3mf)$/i, "").slice(0, 80));
+    if (!selectedFile.name.toLowerCase().endsWith(".3mf")) {
+      setImportStatus("not-found");
+      setImportMessage("STL 不含切片設定，已使用 P1S／Bambu PLA 預設值");
+      return;
+    }
+    setImportStatus("reading");
+    setImportMessage("");
+    try {
+      const imported = await readThreeMfSettings(selectedFile);
+      setPrintSettings(imported.settings);
+      setImportInfo(imported.info);
+      setImportStatus("imported");
+      setImportMessage(`已從 3MF 匯入 ${imported.info.importedSettingCount} 項切片設定`);
+    } catch (importError) {
+      setImportStatus("error");
+      setImportMessage(importError instanceof Error ? importError.message : "無法讀取 3MF 設定，已使用安全預設值");
+    }
+  };
+
   if (!isAuthenticated || !token) return <Navigate to="/login" replace />;
 
   const submit = async (event: React.FormEvent) => {
@@ -122,7 +154,7 @@ export function FabricationSubmit() {
     if (serviceType === "3dp") data.append("title", title);
     data.append("comment", comment);
     data.append("material", serviceType === "3dp" ? "Bambu PLA Basic" : material);
-    if (serviceType === "3dp") data.append("sliceSettings", JSON.stringify({ scalePercent, layerHeight, infillPercent, infillPattern, supportType, brimEnabled, autoOrient }));
+    if (serviceType === "3dp") data.append("sliceSettings", JSON.stringify(printSettings));
     try {
       const payload = await readApi<{ job: FabricationJob }>(await fetch(apiUrl(`/api/fabrication/jobs/${serviceType}`), {
         method: "POST", headers: authHeaders(token), body: data
@@ -162,23 +194,16 @@ export function FabricationSubmit() {
        job?.status === "pending_admin_estimate" ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6"><Clock3 className="w-7 h-7 text-amber-300" /><h2 className="mt-3 text-lg font-mono text-slate-100">檔案已上傳，等待管理員估時</h2><p className="text-sm text-slate-400 mt-1">管理員確認 DXF 並填入時長後，工作會進入雷切 queue。</p><Link to="/fabrication/jobs" className="inline-block mt-4 text-amber-200 underline">查看我的加工工作</Link></div> :
       <form onSubmit={submit} className="grid lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,.75fr)] gap-6">
         <div className="space-y-4">
-          {serviceType === "3dp" ? <ThreeModelPreview file={file} scalePercent={scalePercent} autoOrient={autoOrient} /> : <div className="h-[300px] rounded-2xl border border-dashed border-slate-700 bg-slate-900/30 flex flex-col items-center justify-center"><Scissors className="w-12 h-12 text-slate-600" /><p className="mt-4 text-slate-300 font-mono">DXF FILE INTAKE</p><p className="text-sm text-slate-500 mt-1">加工時間由管理員檢查後填入</p></div>}
+          {serviceType === "3dp" ? <ThreeModelPreview file={file} scalePercent={printSettings.scalePercent} autoOrient={printSettings.autoOrient} layerHeight={printSettings.layerHeight} infillPercent={printSettings.infillPercent} infillPattern={printSettings.infillPattern} supportType={printSettings.supportType} brimEnabled={printSettings.brimType !== "no_brim"} /> : <div className="h-[300px] rounded-2xl border border-dashed border-slate-700 bg-slate-900/30 flex flex-col items-center justify-center"><Scissors className="w-12 h-12 text-slate-600" /><p className="mt-4 text-slate-300 font-mono">DXF FILE INTAKE</p><p className="text-sm text-slate-500 mt-1">加工時間由管理員檢查後填入</p></div>}
           <label className="flex items-center justify-center gap-3 rounded-xl border border-dashed border-slate-600 bg-slate-900/50 px-5 py-5 cursor-pointer hover:border-emerald-500/60">
             <FileUp className="w-5 h-5 text-emerald-400" /><span className="text-sm text-slate-300">{file ? file.name : `選擇 ${accepts} 檔案`}</span>
-            <input type="file" accept={accepts} className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+            <input type="file" accept={accepts} className="hidden" onChange={(event) => void chooseFile(event.target.files?.[0] || null)} />
           </label>
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-5">
           <div className="flex items-center gap-2"><Settings2 className="w-5 h-5 text-emerald-400" /><h2 className="font-mono text-slate-100">JOB_SETTINGS</h2></div>
           {serviceType === "3dp" && <div><label className={labelClass}>工作名稱</label><input required maxLength={80} className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></div>}
-          {serviceType === "3dp" ? <>
-            <div><label className={labelClass}>Scale · {scalePercent}%</label><div className="flex gap-3"><input type="range" min="25" max="200" step="5" className="flex-1 accent-emerald-500" value={scalePercent} onChange={(event) => setScalePercent(Number(event.target.value))} /><button type="button" onClick={() => setScalePercent(100)} className="text-slate-400"><RotateCcw className="w-4 h-4" /></button></div></div>
-            <div className="grid grid-cols-2 gap-3"><div><label className={labelClass}>Layer height</label><select className={fieldClass} value={layerHeight} onChange={(event) => setLayerHeight(Number(event.target.value))}>{[0.12,0.16,0.2,0.24,0.28].map((value) => <option key={value} value={value}>{value} mm</option>)}</select></div><div><label className={labelClass}>Infill · {infillPercent}%</label><input type="number" min="0" max="100" className={fieldClass} value={infillPercent} onChange={(event) => setInfillPercent(Number(event.target.value))} /></div></div>
-            <div><label className={labelClass}>Infill pattern</label><select className={fieldClass} value={infillPattern} onChange={(event) => setInfillPattern(event.target.value)}><option value="grid">Grid</option><option value="gyroid">Gyroid</option><option value="honeycomb">Honeycomb</option><option value="rectilinear">Rectilinear</option></select></div>
-            <div><label className={labelClass}>Support</label><select className={fieldClass} value={supportType} onChange={(event) => setSupportType(event.target.value)}><option value="none">Off</option><option value="normal-auto">Normal auto</option><option value="tree-auto">Tree auto</option></select></div>
-            <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={brimEnabled} onChange={(event) => setBrimEnabled(event.target.checked)} /> Auto brim</label>
-            <div><label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={autoOrient} onChange={(event) => setAutoOrient(event.target.checked)} /> Auto orient</label><p className="mt-1 text-xs text-slate-500">畫面會立即顯示近似方向；送出後由 Bambu Studio 計算最終擺放。</p></div>
-          </> : <>
+          {serviceType === "3dp" ? <ThreeDpSettingsPanel settings={printSettings} importInfo={importInfo} importStatus={importStatus} importMessage={importMessage} onChange={setPrintSettings} onReset={() => { setPrintSettings({ ...DEFAULT_THREE_DP_SETTINGS }); setImportInfo(null); setImportStatus("idle"); setImportMessage(""); }} /> : <>
             <div><label className={labelClass}>材料與厚度</label><select required className={fieldClass} value={material} onChange={(event) => setMaterial(event.target.value)}>{laserMaterialOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div>
           </>}
           <div><label className={labelClass}>備註</label><textarea rows={3} maxLength={1000} className={fieldClass} value={comment} onChange={(event) => setComment(event.target.value)} /></div>

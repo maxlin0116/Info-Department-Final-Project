@@ -17,6 +17,8 @@ router.delete('/users/:id', adminController.deleteUser);
 router.get('/reservations/pending', adminController.getPendingReservations);
 router.patch('/reservations/:id/approve', adminController.approveReservation);
 router.patch('/reservations/:id/reject', adminController.rejectReservation);
+router.patch('/reservations/:id/confirm-attendance', adminController.confirmReservationAttendance);
+router.patch('/reservations/:id/no-show', adminController.markReservationNoShow);
 
 router.get('/fabrication/jobs', adminFabricationController.getJobs);
 router.patch('/fabrication/jobs/:id', adminFabricationController.updateJob);

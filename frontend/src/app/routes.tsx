@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./components/Dashboard";
+import { HomeOverview } from "./components/HomeOverview";
 import { Login } from "./components/Login";
 import { Register } from "./components/Register";
 import { AdminReservations } from "./components/AdminReservations";
@@ -14,7 +15,8 @@ export const router = createBrowserRouter([
     path: "/",
     Component: Layout,
     children: [
-      { index: true, Component: Dashboard },
+      { index: true, Component: HomeOverview },
+      { path: "reserve", Component: Dashboard },
       { path: "admin/reservations", Component: AdminReservations },
       { path: "admin/fabrication", lazy: async () => ({ Component: (await import("./components/AdminFabrication")).AdminFabrication }) },
       { path: "admin/users", lazy: async () => ({ Component: (await import("./components/AdminUsers")).AdminUsers }) },

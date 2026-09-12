@@ -58,8 +58,53 @@ function getCliArguments(sourcePath, outputPath, workDirectory, settings) {
     throw new Error("Bambu Studio profiles are not configured");
   }
 
+  settings = {
+    scalePercent: 100,
+    autoOrient: false,
+    layerHeight: 0.2,
+    initialLayerHeight: 0.2,
+    wallGenerator: "classic",
+    seamPosition: "aligned",
+    sliceClosingRadius: 0.049,
+    resolution: 0.012,
+    arcFitting: true,
+    preciseZHeight: false,
+    xyContourCompensation: 0,
+    xyHoleCompensation: 0,
+    elephantFootCompensation: 0.15,
+    wallLoops: 2,
+    topShellLayers: 5,
+    bottomShellLayers: 3,
+    infillPercent: 15,
+    infillPattern: "grid",
+    outerWallSpeed: 200,
+    innerWallSpeed: 300,
+    infillSpeed: 270,
+    topSurfaceSpeed: 200,
+    travelSpeed: 500,
+    supportType: "none",
+    supportThresholdAngle: 30,
+    supportOnBuildPlateOnly: false,
+    supportXyDistance: 0.4,
+    supportTopZDistance: 0.2,
+    brimType: undefined,
+    brimEnabled: false,
+    brimWidth: 5,
+    brimObjectGap: 0.1,
+    ironingType: "no ironing",
+    ironingFlow: 10,
+    ironingSpeed: 30,
+    ...settings
+  };
+
   const supportEnabled = settings.supportType !== "none";
-  const supportType = settings.supportType === "tree-auto" ? "tree(auto)" : "normal(auto)";
+  const supportTypes = {
+    "normal-auto": "normal(auto)",
+    "tree-auto": "tree(auto)",
+    "normal-manual": "normal(manual)",
+    "tree-manual": "tree(manual)"
+  };
+  const supportType = supportTypes[settings.supportType] || "normal(auto)";
   const args = [
     "--debug", "2",
     "--slice", "0",
@@ -70,11 +115,38 @@ function getCliArguments(sourcePath, outputPath, workDirectory, settings) {
     "--outputdir", workDirectory,
     "--export-3mf", path.basename(outputPath),
     `--layer-height=${settings.layerHeight}`,
+    `--initial-layer-print-height=${settings.initialLayerHeight}`,
+    `--wall-generator=${settings.wallGenerator}`,
+    `--seam-position=${settings.seamPosition}`,
+    `--slice-closing-radius=${settings.sliceClosingRadius}`,
+    `--resolution=${settings.resolution}`,
+    `--enable-arc-fitting=${settings.arcFitting ? 1 : 0}`,
+    `--precise-z-height=${settings.preciseZHeight ? 1 : 0}`,
+    `--xy-contour-compensation=${settings.xyContourCompensation}`,
+    `--xy-hole-compensation=${settings.xyHoleCompensation}`,
+    `--elefant-foot-compensation=${settings.elephantFootCompensation}`,
+    `--wall-loops=${settings.wallLoops}`,
+    `--top-shell-layers=${settings.topShellLayers}`,
+    `--bottom-shell-layers=${settings.bottomShellLayers}`,
     `--sparse-infill-density=${settings.infillPercent}%`,
     `--sparse-infill-pattern=${settings.infillPattern}`,
+    `--outer-wall-speed=${settings.outerWallSpeed}`,
+    `--inner-wall-speed=${settings.innerWallSpeed}`,
+    `--sparse-infill-speed=${settings.infillSpeed}`,
+    `--top-surface-speed=${settings.topSurfaceSpeed}`,
+    `--travel-speed=${settings.travelSpeed}`,
     `--enable-support=${supportEnabled ? 1 : 0}`,
     `--support-type=${supportType}`,
-    `--brim-type=${settings.brimEnabled ? "auto_brim" : "no_brim"}`
+    `--support-threshold-angle=${settings.supportThresholdAngle}`,
+    `--support-on-build-plate-only=${settings.supportOnBuildPlateOnly ? 1 : 0}`,
+    `--support-object-xy-distance=${settings.supportXyDistance}`,
+    `--support-top-z-distance=${settings.supportTopZDistance}`,
+    `--brim-type=${settings.brimType || (settings.brimEnabled ? "auto_brim" : "no_brim")}`,
+    `--brim-width=${settings.brimWidth}`,
+    `--brim-object-gap=${settings.brimObjectGap}`,
+    `--ironing-type=${settings.ironingType}`,
+    `--ironing-flow=${settings.ironingFlow}%`,
+    `--ironing-speed=${settings.ironingSpeed}`
   ];
   if (settings.scalePercent !== 100) args.push("--scale", String(settings.scalePercent / 100));
   // Bambu Studio defines orient as an integer option (0 = off, 1 = force,

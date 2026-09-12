@@ -102,3 +102,23 @@ exports.rejectReservation = async (req, res, next) => {
         next(error);
     }
 };
+
+exports.confirmReservationAttendance = async (req, res, next) => {
+    try {
+        const reservation = await reservationService.confirmAttendance(req.user, req.params.id, new Date());
+        publishDisplayChange('reservation_attendance_confirmed');
+        res.status(200).json({ message: 'Attendance confirmed', reservation });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.markReservationNoShow = async (req, res, next) => {
+    try {
+        const reservation = await reservationService.markNoShow(req.params.id, new Date());
+        publishDisplayChange('reservation_no_show');
+        res.status(200).json({ message: 'Reservation marked as no-show', reservation });
+    } catch (error) {
+        next(error);
+    }
+};

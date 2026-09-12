@@ -21,6 +21,7 @@ export interface FabricationJob {
   estimatedSeconds?: number;
   estimatedMinutes?: number;
   filamentGrams?: number;
+  materialFee?: number;
   layerCount?: number;
   requestedColor?: string;
   assignedColor?: string;
