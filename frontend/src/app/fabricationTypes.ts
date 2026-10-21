@@ -77,13 +77,13 @@ export function formatMinutes(value?: number | null) {
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
-export function formatDateTime(value?: string | null) {
-  return value ? new Intl.DateTimeFormat("zh-TW", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";
+export function formatDateTime(value?: string | null, lang: "zh" | "en" = "zh") {
+  return value ? new Intl.DateTimeFormat(lang === "zh" ? "zh-TW" : "en-US", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";
 }
 
-export function fabricationStatusLabel(status: string, collectedAt?: string | null) {
-  if (status === "completed" && collectedAt) return "已取件";
-  const labels: Record<string, string> = {
+export function fabricationStatusLabel(status: string, collectedAt?: string | null, lang: "zh" | "en" = "zh") {
+  if (status === "completed" && collectedAt) return lang === "zh" ? "已取件" : "Collected";
+  const labelsZh: Record<string, string> = {
     slicing: "切片中",
     slice_ready: "等待送出確認",
     slice_failed: "切片失敗",
@@ -96,5 +96,19 @@ export function fabricationStatusLabel(status: string, collectedAt?: string | nu
     cancelled: "已取消",
     failed: "製作失敗"
   };
+  const labelsEn: Record<string, string> = {
+    slicing: "Slicing",
+    slice_ready: "Awaiting Confirmation",
+    slice_failed: "Slice Failed",
+    pending_admin_estimate: "Pending Review",
+    pending_admin_review: "Pending Review",
+    queued: "Queued",
+    running: "Running",
+    completed: "Completed",
+    rejected: "Rejected",
+    cancelled: "Cancelled",
+    failed: "Failed"
+  };
+  const labels = lang === "zh" ? labelsZh : labelsEn;
   return labels[status] || status;
 }

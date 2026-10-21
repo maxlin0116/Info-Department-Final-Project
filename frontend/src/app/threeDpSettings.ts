@@ -132,11 +132,11 @@ function parseEmbeddedScale(modelSettings: string | undefined) {
   return Math.round(((scaleX + scaleY + scaleZ) / 3) * 1000) / 10;
 }
 
-export async function readThreeMfSettings(file: File): Promise<{ settings: ThreeDpSettings; info: ThreeMfImportInfo }> {
-  if (!file.name.toLowerCase().endsWith(".3mf")) throw new Error("只有 3MF 包含可匯入的 Bambu 專案設定");
+export async function readThreeMfSettings(file: File, lang: "zh" | "en" = "zh"): Promise<{ settings: ThreeDpSettings; info: ThreeMfImportInfo }> {
+  if (!file.name.toLowerCase().endsWith(".3mf")) throw new Error(lang === "zh" ? "只有 3MF 包含可匯入的 Bambu 專案設定" : "Only 3MF files contain importable Bambu project settings");
   const archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
   const settingsEntry = Object.keys(archive).find((name) => /(^|\/)Metadata\/project_settings\.config$/i.test(name));
-  if (!settingsEntry) throw new Error("這個 3MF 沒有 Bambu Studio project settings");
+  if (!settingsEntry) throw new Error(lang === "zh" ? "這個 3MF 沒有 Bambu Studio project settings" : "This 3MF does not contain Bambu Studio project settings");
 
   const decoder = new TextDecoder("utf-8");
   const raw = JSON.parse(decoder.decode(archive[settingsEntry])) as RawSettings;

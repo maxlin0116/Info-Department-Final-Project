@@ -1,6 +1,15 @@
+// @ts-ignore
+import crypto from 'node:crypto'
 import { defineConfig, loadEnv } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+
+// Polyfill crypto.hash for Node 18 environments where Vite 7 is executed
+if (typeof (crypto as any).hash !== 'function') {
+  ;(crypto as any).hash = (algorithm: string, data: any, outputEncoding?: any) => {
+    return crypto.createHash(algorithm).update(data).digest(outputEncoding)
+  }
+}
 
 const resolveFromRoot = (relativePath: string) =>
   new URL(relativePath, import.meta.url).pathname

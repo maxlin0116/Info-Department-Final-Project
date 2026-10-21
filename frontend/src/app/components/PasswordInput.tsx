@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useLanguage } from "../i18n";
 
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
   focusTone?: "emerald" | "amber";
@@ -13,7 +14,8 @@ const focusClassNames = {
 
 export function PasswordInput({ className = "", focusTone = "emerald", ...props }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
-  const label = visible ? "Hide password" : "Show password";
+  const { tx } = useLanguage();
+  const label = visible ? tx("隱藏密碼", "Hide password") : tx("顯示密碼", "Show password");
   const Icon = visible ? EyeOff : Eye;
 
   return (

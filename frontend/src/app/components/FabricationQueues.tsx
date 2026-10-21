@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clock3, Printer, Scissors } from "lucide-react";
 import { apiUrl, readApi } from "../api";
+import { useLanguage } from "../i18n";
 import type { FabricationJob, ServiceType } from "../fabricationTypes";
 import { fabricationStatusLabel, formatDateTime, formatMinutes } from "../fabricationTypes";
 
@@ -20,14 +21,15 @@ function statusMark(job: FabricationJob) {
   return "WAIT";
 }
 
-function timingText(job: FabricationJob) {
-  if (job.status === "running") return `預計完成 ${formatDateTime(job.expectedEndAt)}`;
-  if (job.status === "queued") return `預計開始 ${formatDateTime(job.estimatedStartAt)}`;
-  if (job.status === "completed") return `完成於 ${formatDateTime(job.completedAt)} · 等待取件確認`;
-  return "檔案已送出，等待管理員確認";
+function timingText(job: FabricationJob, lang: "zh" | "en") {
+  if (job.status === "running") return (lang === "zh" ? "預計完成 " : "Expected completion ") + formatDateTime(job.expectedEndAt, lang);
+  if (job.status === "queued") return (lang === "zh" ? "預計開始 " : "Estimated start ") + formatDateTime(job.estimatedStartAt, lang);
+  if (job.status === "completed") return (lang === "zh" ? "完成於 " : "Completed at ") + formatDateTime(job.completedAt, lang) + (lang === "zh" ? " · 等待取件確認" : " · Awaiting pickup");
+  return lang === "zh" ? "檔案已送出，等待管理員確認" : "Submitted, awaiting admin review";
 }
 
 export function FabricationQueues({ compact = false }: { compact?: boolean }) {
+  const { lang, tx } = useLanguage();
   const [queues, setQueues] = useState<Record<ServiceType, FabricationJob[]>>({ "3dp": [], laser: [] });
 
   useEffect(() => {
@@ -53,19 +55,21 @@ export function FabricationQueues({ compact = false }: { compact?: boolean }) {
           {type === "3dp" ? <Printer className="text-sky-400" /> : <Scissors className="text-amber-400" />}
           <div>
             <h2 className="font-mono text-slate-100">{type === "3dp" ? "P1S Queue" : "Laser Queue"}</h2>
-            <p className="text-xs text-slate-500">等待審核 {reviewCount} · 排隊 {queueCount} · 待取件 {completedCount}</p>
+            <p className="text-xs text-slate-500">
+              {tx("等待審核 ", "Pending review ")}{reviewCount} · {tx("排隊 ", "Queued ")}{queueCount} · {tx("待取件 ", "Pending pickup ")}{completedCount}
+            </p>
           </div>
         </header>
         <div className="divide-y divide-slate-800 max-h-[620px] overflow-y-auto">
-          {jobs.length === 0 ? <p className="p-8 text-center text-slate-500">目前沒有工作</p> : jobs.map((job) => <div key={job.id} className="p-4 flex gap-4">
+          {jobs.length === 0 ? <p className="p-8 text-center text-slate-500">{tx("目前沒有工作", "No active jobs in queue")}</p> : jobs.map((job) => <div key={job.id} className="p-4 flex gap-4">
             <div className={`w-12 h-10 rounded-lg border grid place-items-center text-xs font-mono ${statusStyle(job.status)}`}>{statusMark(job)}</div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap justify-between gap-2">
                 <h3 className="truncate font-medium text-slate-100">{job.title}</h3>
-                <div className="flex items-center gap-2"><span className={`rounded-full border px-2 py-0.5 text-[10px] ${statusStyle(job.status)}`}>{fabricationStatusLabel(job.status)}</span><span className="text-xs text-slate-500">{formatMinutes(job.estimatedMinutes)}</span></div>
+                <div className="flex items-center gap-2"><span className={`rounded-full border px-2 py-0.5 text-[10px] ${statusStyle(job.status)}`}>{fabricationStatusLabel(job.status, job.collectedAt, lang)}</span><span className="text-xs text-slate-500">{formatMinutes(job.estimatedMinutes)}</span></div>
               </div>
-              <p className="text-xs text-slate-500 mt-1">{job.user?.name || "Maker"} · {job.assignedColor || job.material || ""}</p>
-              <p className="flex items-center gap-1 mt-2 text-xs text-slate-400"><Clock3 className="w-3 h-3" />{timingText(job)}</p>
+              <p className="text-xs text-slate-500 mt-1">{job.user?.name || (lang === "zh" ? "創客" : "Maker")} · {job.assignedColor || job.material || ""}</p>
+              <p className="flex items-center gap-1 mt-2 text-xs text-slate-400"><Clock3 className="w-3 h-3" />{timingText(job, lang)}</p>
             </div>
           </div>)}
         </div>

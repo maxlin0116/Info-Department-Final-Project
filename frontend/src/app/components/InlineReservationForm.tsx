@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../auth";
+import { translateAreaName, useLanguage } from "../i18n";
 import { QuotaInfo } from "./QuotaInfo";
 
 interface ReservationQuota {
@@ -82,6 +83,7 @@ export function InlineReservationForm({
 }: InlineReservationFormProps) {
   const navigate = useNavigate();
   const { token, isAuthenticated } = useAuth();
+  const { lang, tx } = useLanguage();
 
   const [date, setDate] = useState(initialDate);
   const [startTime, setStartTime] = useState(initialStartTime);
@@ -116,10 +118,13 @@ export function InlineReservationForm({
   const quotaIssue = useMemo(() => {
     if (!quota) return null;
     if (selectedQuotaCost > quota.remaining) {
-      return `Exceeds remaining quota: this slot requires ${selectedQuotaCost} slots, but you only have ${quota.remaining} remaining.`;
+      return tx(
+        `超過剩餘配額：此時段需要 ${selectedQuotaCost} 點配額，但您僅剩 ${quota.remaining} 點。`,
+        `Exceeds remaining quota: this slot requires ${selectedQuotaCost} slots, but you only have ${quota.remaining} remaining.`
+      );
     }
     return null;
-  }, [quota, selectedQuotaCost]);
+  }, [quota, selectedQuotaCost, tx]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -129,7 +134,7 @@ export function InlineReservationForm({
     }
 
     if (!date || !startTime || !endTime) {
-      setError("Please select date, start time, and end time");
+      setError(tx("請選擇日期、開始時間與結束時間", "Please select date, start time, and end time"));
       return;
     }
 
@@ -170,7 +175,7 @@ export function InlineReservationForm({
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Failed to create reservation");
+        throw new Error(result.error || tx("建立預約失敗", "Failed to create reservation"));
       }
 
       setIsSuccess(true);
@@ -178,7 +183,7 @@ export function InlineReservationForm({
         onSuccess();
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reservation failed");
+      setError(err instanceof Error ? err.message : tx("預約失敗", "Reservation failed"));
     } finally {
       setSubmitting(false);
     }
@@ -200,21 +205,24 @@ export function InlineReservationForm({
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-mono transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          BACK_TO_AREAS
+          {tx("返回區域列表", "BACK_TO_AREAS")}
         </button>
 
         <span className="text-[10px] uppercase font-mono tracking-widest text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30">
-          RESERVATION_PANEL
+          {tx("預約表單", "RESERVATION_PANEL")}
         </span>
       </div>
 
       <div className="p-5 flex-1 overflow-y-auto custom-scrollbar space-y-5">
         <div>
           <h3 className="text-lg font-bold font-mono text-slate-100 tracking-tight">
-            {areaName}
+            {translateAreaName(areaName, lang)}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5 font-sans">
-            Capacity: {maxCapacity} seats max. Click the first and last calendar slot, or drag across slots, to update the full time range.
+            {tx(
+              `人數上限：最多 ${maxCapacity} 人。可於右側時間表點選起訖時段或按住拖曳來自動填入預約區間。`,
+              `Capacity: ${maxCapacity} seats max. Click the first and last calendar slot, or drag across slots, to update the full time range.`
+            )}
           </p>
         </div>
 
@@ -230,10 +238,13 @@ export function InlineReservationForm({
                 <CheckCircle2 className="w-8 h-8 text-emerald-400" />
               </div>
               <h4 className="text-base font-bold font-mono text-slate-100">
-                RESERVATION SUBMITTED
+                {tx("預約已送出", "RESERVATION SUBMITTED")}
               </h4>
               <p className="text-xs text-slate-400 max-w-xs">
-                Your session is queued for administrative approval. Refreshing schedule...
+                {tx(
+                  "您的預約已送交管理員審核，正在更新時間表...",
+                  "Your session is queued for administrative approval. Refreshing schedule..."
+                )}
               </p>
             </motion.div>
           ) : (
@@ -242,17 +253,20 @@ export function InlineReservationForm({
                 <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 space-y-2">
                   <div className="font-semibold font-mono text-xs flex items-center gap-1.5 text-amber-300">
                     <LogIn className="w-3.5 h-3.5" />
-                    AUTHENTICATION REQUIRED
+                    {tx("需要登入", "AUTHENTICATION REQUIRED")}
                   </div>
                   <p className="text-[11px] leading-relaxed">
-                    You can browse the calendar, but you must sign in to submit a reservation.
+                    {tx(
+                      "您可以瀏覽時間表，但必須先登入才能送出空間預約申請。",
+                      "You can browse the calendar, but you must sign in to submit a reservation."
+                    )}
                   </p>
                   <button
                     type="button"
                     onClick={() => navigate("/login")}
                     className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold font-mono text-xs rounded-lg transition-colors cursor-pointer"
                   >
-                    SIGN IN TO RESERVE
+                    {tx("前往登入以預約", "SIGN IN TO RESERVE")}
                   </button>
                 </div>
               )}
@@ -270,16 +284,19 @@ export function InlineReservationForm({
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="flex items-center gap-1 text-slate-400">
                       <Gauge className="w-3.5 h-3.5 text-emerald-400" />
-                      QUOTA USAGE
+                      {tx("配額使用量", "QUOTA USAGE")}
                     </span>
                     <span className={quota.remaining === 0 ? "text-rose-400" : "text-slate-200"}>
-                      {quota.remaining}/{quota.limit} LEFT
+                      {tx(`剩餘 ${quota.remaining}/${quota.limit}`, `${quota.remaining}/{quota.limit} LEFT`)}
                     </span>
                   </div>
                   {selectedQuotaCost > 0 && (
                     <div className="text-[10px] text-slate-400">
-                      Cost for selected duration:{" "}
-                      <span className="text-emerald-300 font-bold">{selectedQuotaCost} slots</span> ({selectedPeople} pax)
+                      {tx("本次預約所需配額：", "Cost for selected duration: ")}
+                      <span className="text-emerald-300 font-bold">
+                        {tx(`${selectedQuotaCost} 點`, `${selectedQuotaCost} slots`)}
+                      </span>{" "}
+                      ({tx(`${selectedPeople} 人`, `${selectedPeople} pax`)})
                     </div>
                   )}
                 </div>
@@ -289,7 +306,7 @@ export function InlineReservationForm({
               <div className="space-y-1">
                 <label className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  DATE
+                  {tx("預約日期", "DATE")}
                 </label>
                 <input
                   type="date"
@@ -305,7 +322,7 @@ export function InlineReservationForm({
                 <div className="space-y-1">
                   <label className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    START TIME
+                    {tx("開始時間", "START TIME")}
                   </label>
                   <input
                     type="time"
@@ -319,7 +336,7 @@ export function InlineReservationForm({
                 <div className="space-y-1">
                   <label className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    END TIME
+                    {tx("結束時間", "END TIME")}
                   </label>
                   <input
                     type="time"
@@ -336,9 +353,9 @@ export function InlineReservationForm({
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-slate-500" />
-                    PARTICIPANTS (PAX)
+                    {tx("使用人數", "PARTICIPANTS (PAX)")}
                   </label>
-                  <span className="text-[10px] font-mono text-slate-500">Max: {maxCapacity}</span>
+                  <span className="text-[10px] font-mono text-slate-500">{tx(`上限：${maxCapacity}`, `Max: ${maxCapacity}`)}</span>
                 </div>
                 <input
                   type="number"
@@ -354,12 +371,12 @@ export function InlineReservationForm({
               {/* Purpose */}
               <div className="space-y-1">
                 <label className="text-[11px] font-mono text-slate-400">
-                  PURPOSE / PROJECT
+                  {tx("借用目的／專題名稱", "PURPOSE / PROJECT")}
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Capstone project work or team discussion"
+                  placeholder={tx("例如：專題實作、團隊討論", "e.g. Capstone project work or team discussion")}
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
@@ -369,11 +386,11 @@ export function InlineReservationForm({
               {/* Planned Items */}
               <div className="space-y-1">
                 <label className="text-[11px] font-mono text-slate-400">
-                  PLANNED TOOLS / EQUIPMENT
+                  {tx("預計使用工具／設備", "PLANNED TOOLS / EQUIPMENT")}
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Oscilloscope, hand tools (one item per line)"
+                  placeholder={tx("例如：示波器、手工具（每行一項）", "e.g. Oscilloscope, hand tools (one item per line)")}
                   value={plannedItemsInput}
                   onChange={(e) => setPlannedItemsInput(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-emerald-500 resize-none"
@@ -388,7 +405,7 @@ export function InlineReservationForm({
                   className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs uppercase tracking-tight rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  {submitting ? "SUBMITTING_RSVN..." : "CONFIRM_RESERVATION"}
+                  {submitting ? tx("送出預約中...", "SUBMITTING_RSVN...") : tx("確認送出預約", "CONFIRM_RESERVATION")}
                 </button>
 
                 <button
@@ -396,7 +413,7 @@ export function InlineReservationForm({
                   onClick={onBack}
                   className="w-full py-2 rounded-lg border border-slate-800 bg-slate-950/40 text-slate-400 hover:text-slate-200 text-xs font-mono transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {tx("取消", "Cancel")}
                 </button>
               </div>
             </form>

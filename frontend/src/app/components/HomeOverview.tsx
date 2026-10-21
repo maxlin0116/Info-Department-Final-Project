@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { apiUrl, readApi } from "../api";
 import type { FabricationJob, ServiceType } from "../fabricationTypes";
 import { formatMinutes } from "../fabricationTypes";
+import { translateAreaName, translateDayLabel, useLanguage } from "../i18n";
 
 interface PublicReservation {
   id: string;
@@ -38,21 +39,14 @@ interface OperationsSnapshot {
   machines: Array<{ serviceType: ServiceType; name: string; status: string; serviceOpen: boolean; note: string }>;
 }
 
-const statusLabels: Record<string, string> = {
-  pending: "等待審核",
-  approved: "已核准",
-  check_in_pending: "已報到",
-  in_use: "使用中",
-};
-
 function getDurationMinutes(startTime: string, endTime: string) {
   const [startHours, startMinutes] = startTime.split(":").map(Number);
   const [endHours, endMinutes] = endTime.split(":").map(Number);
   return endHours * 60 + endMinutes - (startHours * 60 + startMinutes);
 }
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("zh-TW", {
+function formatDateTime(value: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
@@ -62,7 +56,15 @@ function formatDateTime(value: string) {
 }
 
 function PublicScheduleView({ schedule }: { schedule: PublicSchedule }) {
+  const { lang, locale, tx } = useLanguage();
   const [selectedReservationIds, setSelectedReservationIds] = useState<string[]>([]);
+
+  const statusLabels: Record<string, string> = {
+    pending: tx("等待審核", "Pending Review"),
+    approved: tx("已核准", "Approved"),
+    check_in_pending: tx("已報到", "Checked In"),
+    in_use: tx("使用中", "In Use"),
+  };
 
   useEffect(() => {
     const clearSelectionOutsideReservation = (event: PointerEvent) => {
@@ -96,12 +98,14 @@ function PublicScheduleView({ schedule }: { schedule: PublicSchedule }) {
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-100">
             <CalendarDays className="w-5 h-5 text-emerald-400" />
-            {schedule.area.name} 公開時間表
+            {translateAreaName(schedule.area.name, lang)} {tx("公開時間表", "Public Schedule")}
           </h2>
-          <p className="mt-1 text-sm text-slate-400">僅供查看。點選有預約的時段，可查看借用人與用途。</p>
+          <p className="mt-1 text-sm text-slate-400">
+            {tx("僅供查看。點選有預約的時段，可查看借用人與用途。", "Read-only view. Click any reserved slot to view the borrower and purpose.")}
+          </p>
         </div>
         <span className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-sm text-slate-400">
-          最多 {schedule.area.maxCapacity} 人
+          {tx(`最多 ${schedule.area.maxCapacity} 人`, `Max ${schedule.area.maxCapacity} pax`)}
         </span>
       </header>
 
@@ -121,14 +125,14 @@ function PublicScheduleView({ schedule }: { schedule: PublicSchedule }) {
                 </div>
                 <p className="mt-2 text-base text-slate-200">{reservation.purpose}</p>
                 <p className="mt-2 font-mono text-sm text-slate-400">
-                  {formatDateTime(reservation.startTime)}–{formatDateTime(reservation.endTime)} · {reservation.participantCount} 人
+                  {formatDateTime(reservation.startTime, locale)}–{formatDateTime(reservation.endTime, locale)} · {tx(`${reservation.participantCount} 人`, `${reservation.participantCount} pax`)}
                 </p>
               </article>
             ))}
           </div>
         ) : (
           <div className="flex min-h-[70px] items-center justify-center text-sm text-slate-500">
-            點選下方有預約的區塊後，這裡會顯示完整預約資訊。
+            {tx("點選下方有預約的區塊後，這裡會顯示完整預約資訊。", "Click a reserved slot below to display full reservation details here.")}
           </div>
         )}
       </div>
@@ -136,10 +140,10 @@ function PublicScheduleView({ schedule }: { schedule: PublicSchedule }) {
       <div className="overflow-x-auto p-4 custom-scrollbar">
         <div className="min-w-[820px]">
           <div className="mb-2 flex border-b border-slate-800 pb-2">
-            <div className="w-20 shrink-0 pr-3 text-right text-xs font-mono text-slate-500">時間</div>
+            <div className="w-20 shrink-0 pr-3 text-right text-xs font-mono text-slate-500">{tx("時間", "Time")}</div>
             {schedule.dates.map((day) => (
               <div key={day.date} className="mx-1 flex-1 rounded-lg border border-slate-800 bg-slate-950/60 py-2 text-center">
-                <div className="text-sm font-semibold text-slate-200">{day.dayLabel}</div>
+                <div className="text-sm font-semibold text-slate-200">{translateDayLabel(day.dayLabel, lang)}</div>
                 <div className="text-xs font-mono text-slate-500">{day.display}</div>
               </div>
             ))}
@@ -181,12 +185,16 @@ function PublicScheduleView({ schedule }: { schedule: PublicSchedule }) {
                         onClick={() => setSelectedReservationIds(reservationIds)}
                         style={{ height }}
                         className={`mx-1 flex-1 rounded-lg border px-2 transition-all ${color} ${isOccupied ? "cursor-pointer" : "cursor-default"}`}
-                        title={isOccupied ? "查看此時段的借用資訊" : "此時段沒有預約"}
+                        title={isOccupied ? tx("查看此時段的借用資訊", "View reservation details for this slot") : tx("此時段沒有預約", "No reservation for this slot")}
                       >
                         <span className="block text-sm font-medium">
-                          {isOccupied ? (reservationIds.length > 1 ? `${reservationIds.length} 筆預約` : "已預約") : "可使用"}
+                          {isOccupied
+                            ? reservationIds.length > 1
+                              ? tx(`${reservationIds.length} 筆預約`, `${reservationIds.length} Bookings`)
+                              : tx("已預約", "Reserved")
+                            : tx("可使用", "Available")}
                         </span>
-                        {isOccupied && <span className="mt-0.5 block text-xs opacity-75">{slot.occupiedCount} 人</span>}
+                        {isOccupied && <span className="mt-0.5 block text-xs opacity-75">{tx(`${slot.occupiedCount} 人`, `${slot.occupiedCount} pax`)}</span>}
                       </button>
                     );
                   })}
@@ -201,6 +209,7 @@ function PublicScheduleView({ schedule }: { schedule: PublicSchedule }) {
 }
 
 function MachineCard({ type, snapshot }: { type: ServiceType; snapshot: OperationsSnapshot }) {
+  const { locale, tx } = useLanguage();
   const machine = snapshot.machines.find((item) => item.serviceType === type);
   const runningJob = (snapshot.queues[type] || []).find((item) => item.status === "running");
   const isRunning = Boolean(runningJob) || machine?.status === "running";
@@ -214,37 +223,44 @@ function MachineCard({ type, snapshot }: { type: ServiceType; snapshot: Operatio
             <Icon className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-slate-100">{type === "3dp" ? "3DP · Bambu P1S" : "雷射切割機"}</h2>
+            <h2 className="text-xl font-semibold text-slate-100">{type === "3dp" ? "3DP · Bambu P1S" : tx("雷射切割機", "Laser Cutter")}</h2>
             <p className="mt-1 text-sm text-slate-500">{machine?.name || "Machine"}</p>
           </div>
         </div>
         <span className={`rounded-full border px-3 py-1 text-sm font-mono ${isRunning ? "border-emerald-500/40 text-emerald-300" : machine?.serviceOpen === false ? "border-rose-500/40 text-rose-300" : "border-slate-700 text-slate-400"}`}>
-          {isRunning ? "執行中" : machine?.serviceOpen === false ? "暫停服務" : "目前閒置"}
+          {isRunning ? tx("執行中", "Running") : machine?.serviceOpen === false ? tx("暫停服務", "Paused") : tx("目前閒置", "Idle")}
         </span>
       </div>
 
       {runningJob ? (
         <div className="mt-5 rounded-xl border border-emerald-500/25 bg-slate-950/45 p-4">
-          <div className="text-xs font-mono text-emerald-300">CURRENT JOB</div>
+          <div className="text-xs font-mono text-emerald-300">{tx("目前工作", "CURRENT JOB")}</div>
           <h3 className="mt-1 text-lg font-medium text-slate-100">{runningJob.title}</h3>
           <p className="mt-1 text-sm text-slate-400">
             {runningJob.user?.name || "Maker"} · {formatMinutes(runningJob.estimatedMinutes)}
           </p>
           <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-300">
             <Clock3 className="w-4 h-4" />
-            {runningJob.expectedEndAt ? `預計 ${formatDateTime(runningJob.expectedEndAt)} 完成` : "製作進行中"}
+            {runningJob.expectedEndAt
+              ? tx(`預計 ${formatDateTime(runningJob.expectedEndAt, locale)} 完成`, `Est. completion: ${formatDateTime(runningJob.expectedEndAt, locale)}`)
+              : tx("製作進行中", "In progress")}
           </p>
         </div>
       ) : (
         <div className="mt-5 rounded-xl border border-dashed border-slate-700 p-6 text-center text-base text-slate-500">
-          目前沒有正在執行的工作
+          {tx("目前沒有正在執行的工作", "No active job currently running")}
         </div>
       )}
 
       <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-slate-500">排隊中 {(snapshot.queues[type] || []).filter((item) => item.status === "queued").length} 件</span>
+        <span className="text-slate-500">
+          {tx(
+            `排隊中 ${(snapshot.queues[type] || []).filter((item) => item.status === "queued").length} 件`,
+            `${(snapshot.queues[type] || []).filter((item) => item.status === "queued").length} queued`
+          )}
+        </span>
         <Link to={`/fabrication/${type}`} className="font-medium text-emerald-300 hover:text-emerald-200">
-          前往{type === "3dp" ? " 3DP" : "雷切"} →
+          {type === "3dp" ? tx("前往 3DP →", "Go to 3DP →") : tx("前往雷切 →", "Go to Laser →")}
         </Link>
       </div>
     </section>
@@ -252,6 +268,7 @@ function MachineCard({ type, snapshot }: { type: ServiceType; snapshot: Operatio
 }
 
 export function HomeOverview() {
+  const { locale, tx } = useLanguage();
   const [schedule, setSchedule] = useState<PublicSchedule | null>(null);
   const [snapshot, setSnapshot] = useState<OperationsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -266,14 +283,14 @@ export function HomeOverview() {
       ]);
       setSchedule(nextSchedule);
       setSnapshot(nextSnapshot);
-      setLastUpdated(new Intl.DateTimeFormat("zh-TW", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()));
+      setLastUpdated(new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()));
       setError("");
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "首頁狀態載入失敗");
+      setError(loadError instanceof Error ? loadError.message : tx("首頁狀態載入失敗", "Failed to load overview status"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale, tx]);
 
   useEffect(() => {
     void load();
@@ -286,12 +303,12 @@ export function HomeOverview() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-mono tracking-[.2em] text-emerald-400">MKS LIVE OVERVIEW</p>
-          <h1 className="mt-1 text-3xl font-semibold text-slate-100">MakerSpace 使用總覽</h1>
-          <p className="mt-2 text-base text-slate-400">查看空間預約與目前正在執行的加工工作。</p>
+          <h1 className="mt-1 text-3xl font-semibold text-slate-100">{tx("MakerSpace 使用總覽", "MakerSpace Live Overview")}</h1>
+          <p className="mt-2 text-base text-slate-400">{tx("查看空間預約與目前正在執行的加工工作。", "View workspace reservations and currently running fabrication jobs.")}</p>
         </div>
         <div className="flex items-center gap-2 text-sm font-mono text-slate-500">
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          {lastUpdated ? `更新於 ${lastUpdated}` : "讀取中"}
+          {lastUpdated ? tx(`更新於 ${lastUpdated}`, `Updated at ${lastUpdated}`) : tx("讀取中", "Loading...")}
         </div>
       </header>
 

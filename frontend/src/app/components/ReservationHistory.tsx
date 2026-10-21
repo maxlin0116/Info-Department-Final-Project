@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
+import { translateAreaName, useLanguage, type Language } from "../i18n";
 
 interface ReservationArea {
   id: string;
@@ -43,8 +44,8 @@ interface HistoryProps {
   onBack: () => void;
 }
 
-const formatReservationDate = (value: string) =>
-  new Intl.DateTimeFormat("en-US", {
+const formatReservationDate = (value: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -57,7 +58,7 @@ const formatPlannedItems = (items: PlannedItem[]) =>
     .map((item) => `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`)
     .join(", ");
 
-const getReservationStatusLabel = (reservation: ReservationItem, now: Date) => {
+const getReservationStatusKey = (reservation: ReservationItem, now: Date) => {
   if (reservation.status === "cancelled") return "Cancelled";
   if (reservation.status === "rejected") return "Rejected";
   if (reservation.status === "pending") return "Pending";
@@ -72,6 +73,22 @@ const getReservationStatusLabel = (reservation: ReservationItem, now: Date) => {
   if (now < startTime) return "Upcoming";
   if (now >= startTime && now < endTime) return "In Progress";
   return "Completed";
+};
+
+const translateStatusKey = (statusKey: string, lang: Language) => {
+  if (lang === "en") return statusKey;
+  const map: Record<string, string> = {
+    Upcoming: "即將開始",
+    "In Progress": "進行中",
+    "In Use": "使用中",
+    "Check-in Pending": "待確認報到",
+    Completed: "已完成",
+    Pending: "等待審核",
+    Rejected: "已拒絕",
+    Cancelled: "已取消",
+    "No-show": "未到場",
+  };
+  return map[statusKey] || statusKey;
 };
 
 const getReservationStatusClassName = (status: string) => {
@@ -91,6 +108,7 @@ const getReservationStatusClassName = (status: string) => {
 
 export function ReservationHistory({ reservations, loading, error, onBack }: HistoryProps) {
   const { isAuthenticated } = useAuth();
+  const { lang, locale, tx } = useLanguage();
   const shouldReduceMotion = useReducedMotion();
   const now = useMemo(() => new Date(), []);
 
@@ -98,7 +116,7 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
     return reservations
       .map((r) => ({
         ...r,
-        derivedStatus: getReservationStatusLabel(r, now),
+        derivedStatus: getReservationStatusKey(r, now),
       }))
       .filter((r) => 
         r.status === "cancelled" || 
@@ -112,8 +130,8 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
   if (!isAuthenticated) {
     return (
       <div className="text-center py-20">
-        <p className="text-slate-400 font-mono">AUTH_REQUIRED: Please login to view history.</p>
-        <Link to="/login" className="mt-4 inline-block text-emerald-400 font-mono hover:underline">GOTO_LOGIN</Link>
+        <p className="text-slate-400 font-mono">{tx("請先登入以查看歷史紀錄。", "AUTH_REQUIRED: Please login to view history.")}</p>
+        <Link to="/login" className="mt-4 inline-block text-emerald-400 font-mono hover:underline">{tx("前往登入", "GOTO_LOGIN")}</Link>
       </div>
     );
   }
@@ -126,11 +144,11 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
           className="flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm group cursor-pointer"
         >
           <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          BACK_TO_DASHBOARD
+          {tx("返回預約面板", "BACK_TO_DASHBOARD")}
         </button>
         <div className="flex items-center gap-2 text-slate-500 font-mono text-xs uppercase tracking-widest">
           <HistoryIcon className="w-4 h-4" />
-          Archive_Database
+          {tx("歷史紀錄庫", "Archive_Database")}
         </div>
       </div>
 
@@ -140,16 +158,16 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
         className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden backdrop-blur-sm"
       >
         <div className="px-5 py-4 border-b border-slate-800 bg-slate-900/20">
-          <h2 className="text-lg font-semibold text-slate-100 font-mono tracking-tight">Reservation History</h2>
-          <p className="text-sm text-slate-500 mt-1 font-sans">Archived records of past terminal sessions.</p>
+          <h2 className="text-lg font-semibold text-slate-100 font-mono tracking-tight">{tx("歷史預約紀錄", "Reservation History")}</h2>
+          <p className="text-sm text-slate-500 mt-1 font-sans">{tx("過往空間預約與借用封存紀錄。", "Archived records of past terminal sessions.")}</p>
         </div>
 
         {loading ? (
-          <div className="px-5 py-12 text-center text-slate-500 font-mono animate-pulse">QUERYING_ARCHIVE...</div>
+          <div className="px-5 py-12 text-center text-slate-500 font-mono animate-pulse">{tx("正在讀取歷史紀錄...", "QUERYING_ARCHIVE...")}</div>
         ) : error ? (
           <div className="px-5 py-8 text-amber-200 bg-amber-500/10 border-t border-amber-500/20 font-mono text-sm">{error}</div>
         ) : historyReservations.length === 0 ? (
-          <div className="px-5 py-20 text-center text-slate-500 font-mono italic">NO_ARCHIVED_RESERVATIONS_FOUND</div>
+          <div className="px-5 py-20 text-center text-slate-500 font-mono italic">{tx("尚無歷史預約紀錄", "NO_ARCHIVED_RESERVATIONS_FOUND")}</div>
         ) : (
           <div className="divide-y divide-slate-800">
             {historyReservations.map((reservation, i) => (
@@ -162,18 +180,18 @@ export function ReservationHistory({ reservations, loading, error, onBack }: His
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h3 className="text-sm font-semibold text-slate-300 font-mono">{reservation.area.name}</h3>
+                    <h3 className="text-sm font-semibold text-slate-300 font-mono">{translateAreaName(reservation.area.name, lang)}</h3>
                     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-mono font-medium uppercase opacity-70 ${getReservationStatusClassName(reservation.derivedStatus)}`}>
-                      {reservation.derivedStatus}
+                      {translateStatusKey(reservation.derivedStatus, lang)}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1 font-mono">
-                    {formatReservationDate(reservation.startTime)} - {formatReservationDate(reservation.endTime)}
+                    {formatReservationDate(reservation.startTime, locale)} - {formatReservationDate(reservation.endTime, locale)}
                   </p>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 opacity-60">
                     <p className="text-[11px] text-slate-500">
                       <Users className="w-3 h-3 inline mr-1" />
-                      {reservation.participantCount} pax
+                      {tx(`${reservation.participantCount} 人`, `${reservation.participantCount} pax`)}
                     </p>
                     {reservation.purpose && <p className="text-[11px] text-slate-500 italic">"{reservation.purpose}"</p>}
                   </div>

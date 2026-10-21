@@ -12,30 +12,8 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-
-interface AreaSummary {
-  id: string;
-  name: string;
-  type: string;
-  maxCapacity: number;
-  description: string;
-  showPrintingStatus: boolean;
-  isActive: boolean;
-  bookingMode: "schedule" | "queue";
-  serviceType: "meeting" | "soldering" | "3dp" | "laser";
-}
-
-interface AreaStatusItem {
-  area: AreaSummary;
-  usedCount: number;
-  remainingCapacity: number;
-  activeReservationCount: number;
-  isFull: boolean;
-  hasActivePrinting: boolean;
-  queueLength?: number;
-  machineStatus?: string;
-  serviceOpen?: boolean;
-}
+import { translateAreaDescription, translateAreaName, useLanguage, type Language } from "../i18n";
+import type { AreaSummary, AreaStatusItem } from "./Dashboard";
 
 interface AreaCardDeckProps {
   areas: AreaStatusItem[];
@@ -44,38 +22,38 @@ interface AreaCardDeckProps {
   onBookArea: (area: AreaSummary) => void;
 }
 
-const getAreaMeta = (type: string) => {
+const getAreaMeta = (type: string, lang: Language) => {
   switch (type) {
     case "meeting":
-      return { icon: Users, eyebrow: "MakerSpace General Access", color: "emerald" };
+      return { icon: Users, eyebrow: lang === "zh" ? "MakerSpace 一般預約" : "MakerSpace General Access", color: "emerald" };
     case "soldering":
-      return { icon: Hammer, eyebrow: "Electronics & Soldering", color: "emerald" };
+      return { icon: Hammer, eyebrow: lang === "zh" ? "電子與焊接區" : "Electronics & Soldering", color: "emerald" };
     case "3dp":
-      return { icon: Printer, eyebrow: "3D Printing Queue", color: "cyan" };
+      return { icon: Printer, eyebrow: lang === "zh" ? "3D 列印佇列" : "3D Printing Queue", color: "cyan" };
     case "heavy_processing":
-      return { icon: Zap, eyebrow: "Machining & Laser Cutter", color: "amber" };
+      return { icon: Zap, eyebrow: lang === "zh" ? "雷射切割與重加工" : "Machining & Laser Cutter", color: "amber" };
     default:
-      return { icon: Layers, eyebrow: "MakerSpace Area", color: "emerald" };
+      return { icon: Layers, eyebrow: lang === "zh" ? "MakerSpace 區域" : "MakerSpace Area", color: "emerald" };
   }
 };
 
-const getStatusDetails = (item: AreaStatusItem) => {
+const getStatusDetails = (item: AreaStatusItem, lang: Language) => {
   if (!item.area.isActive || item.serviceOpen === false) {
-    return { label: "MAINTENANCE", color: "text-amber-400 bg-amber-400/10 border-amber-400/30" };
+    return { label: lang === "zh" ? "維護中" : "MAINTENANCE", color: "text-amber-400 bg-amber-400/10 border-amber-400/30" };
   }
   if (item.area.bookingMode === "queue") {
     const status = item.machineStatus || "idle";
     return status === "running"
-      ? { label: "PRINTING", color: "text-cyan-400 bg-cyan-400/10 border-cyan-400/30" }
-      : { label: "IDLE", color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30" };
+      ? { label: lang === "zh" ? "列印中" : "PRINTING", color: "text-cyan-400 bg-cyan-400/10 border-cyan-400/30" }
+      : { label: lang === "zh" ? "閒置" : "IDLE", color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30" };
   }
   if (item.isFull) {
-    return { label: "FULL", color: "text-rose-400 bg-rose-400/10 border-rose-400/30" };
+    return { label: lang === "zh" ? "已滿" : "FULL", color: "text-rose-400 bg-rose-400/10 border-rose-400/30" };
   }
   if (item.usedCount > 0) {
-    return { label: "OCCUPIED", color: "text-amber-400 bg-amber-400/10 border-amber-400/30" };
+    return { label: lang === "zh" ? "使用中" : "OCCUPIED", color: "text-amber-400 bg-amber-400/10 border-amber-400/30" };
   }
-  return { label: "AVAILABLE", color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30" };
+  return { label: lang === "zh" ? "可預約" : "AVAILABLE", color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30" };
 };
 
 export function AreaCardDeck({
@@ -84,6 +62,7 @@ export function AreaCardDeck({
   onSelectArea,
   onBookArea,
 }: AreaCardDeckProps) {
+  const { lang, tx } = useLanguage();
   const isAllSelected = selectedAreaId === "all";
 
   // Cycle navigation helpers
@@ -134,10 +113,10 @@ export function AreaCardDeck({
           </div>
           <div>
             <div className="text-xs font-bold font-mono text-slate-100 tracking-tight uppercase">
-              RESERVATION SPACES
+              {tx("預約空間總覽", "RESERVATION SPACES")}
             </div>
             <div className="text-[10px] text-slate-500 font-mono">
-              Browse available MakerSpace schedules
+              {tx("瀏覽可預約的 MakerSpace 時段", "Browse available MakerSpace schedules")}
             </div>
           </div>
         </div>
@@ -149,25 +128,25 @@ export function AreaCardDeck({
               : "bg-slate-900 text-slate-500 border-slate-800"
           }`}
         >
-          {areas.length} SPACE{areas.length === 1 ? "" : "S"}
+          {tx(`${areas.length} 個區域`, `${areas.length} SPACE${areas.length === 1 ? "" : "S"}`)}
         </span>
       </motion.button>
 
       {/* Navigation chevron row for easy stepping */}
       <div className="flex items-center justify-between px-2 text-[10px] font-mono text-slate-500">
-        <span>AREA_NAVIGATION_DECK</span>
+        <span>{tx("區域切換導覽", "AREA_NAVIGATION_DECK")}</span>
         <div className="flex items-center gap-1">
           <button
             onClick={handlePrev}
             className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-            title="Previous area"
+            title={tx("上一個區域", "Previous area")}
           >
             <ChevronUp className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleNext}
             className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-            title="Next area"
+            title={tx("下一個區域", "Next area")}
           >
             <ChevronDown className="w-3.5 h-3.5" />
           </button>
@@ -178,8 +157,8 @@ export function AreaCardDeck({
       <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-0.5">
         {areas.map((item) => {
           const isSelected = selectedAreaId === item.area.id;
-          const { icon: Icon, eyebrow } = getAreaMeta(item.area.type);
-          const status = getStatusDetails(item);
+          const { icon: Icon, eyebrow } = getAreaMeta(item.area.type, lang);
+          const status = getStatusDetails(item, lang);
           const isQueueMode = item.area.bookingMode === "queue";
 
           if (isSelected) {
@@ -203,7 +182,7 @@ export function AreaCardDeck({
                         {eyebrow}
                       </div>
                       <h3 className="text-base font-bold font-mono text-slate-100 tracking-tight">
-                        {item.area.name}
+                        {translateAreaName(item.area.name, lang)}
                       </h3>
                     </div>
                   </div>
@@ -216,14 +195,14 @@ export function AreaCardDeck({
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                  {item.area.description}
+                  {translateAreaDescription(item.area.description, lang)}
                 </p>
 
                 {/* Metrics */}
                 <div className="grid grid-cols-2 gap-2 font-mono text-xs">
                   <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/70">
                     <div className="text-[10px] text-slate-500 uppercase">
-                      {isQueueMode ? "Machine State" : "Live In Use"}
+                      {isQueueMode ? tx("機台狀態", "Machine State") : tx("目前使用人數", "Live In Use")}
                     </div>
                     <div className="text-sm font-bold text-slate-100 mt-0.5">
                       {isQueueMode ? item.machineStatus || "idle" : `${item.usedCount} / ${item.area.maxCapacity}`}
@@ -232,10 +211,12 @@ export function AreaCardDeck({
 
                   <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/70">
                     <div className="text-[10px] text-slate-500 uppercase">
-                      {isQueueMode ? "Queue Length" : "Seats Free"}
+                      {isQueueMode ? tx("排隊數量", "Queue Length") : tx("剩餘座位", "Seats Free")}
                     </div>
                     <div className="text-sm font-bold text-emerald-400 mt-0.5">
-                      {isQueueMode ? `${item.queueLength || 0} jobs` : `${item.remainingCapacity} seats`}
+                      {isQueueMode
+                        ? tx(`${item.queueLength || 0} 件`, `${item.queueLength || 0} jobs`)
+                        : tx(`${item.remainingCapacity} 個座位`, `${item.remainingCapacity} seats`)}
                     </div>
                   </div>
                 </div>
@@ -248,7 +229,7 @@ export function AreaCardDeck({
                       className="w-full py-2.5 px-4 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs rounded-lg transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)] flex items-center justify-center gap-2"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Upload File & Enter Queue
+                      {tx("上傳檔案並加入排隊", "Upload File & Enter Queue")}
                     </Link>
                   ) : (
                     <button
@@ -257,7 +238,7 @@ export function AreaCardDeck({
                       className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                     >
                       <Calendar className="w-3.5 h-3.5" />
-                      Book This Workspace
+                      {tx("預約此空間", "Book This Workspace")}
                     </button>
                   )}
                 </div>
@@ -288,12 +269,12 @@ export function AreaCardDeck({
                   </div>
                   <div className="min-w-0 truncate">
                     <div className="text-xs font-bold font-mono text-slate-300 group-hover:text-slate-100 truncate">
-                      {item.area.name}
+                      {translateAreaName(item.area.name, lang)}
                     </div>
                     <div className="text-[10px] text-slate-500 font-mono truncate">
                       {isQueueMode
-                        ? `${item.queueLength || 0} in queue`
-                        : `${item.remainingCapacity} seats free`}
+                        ? tx(`${item.queueLength || 0} 件排隊中`, `${item.queueLength || 0} in queue`)
+                        : tx(`剩餘 ${item.remainingCapacity} 個座位`, `${item.remainingCapacity} seats free`)}
                     </div>
                   </div>
                 </div>

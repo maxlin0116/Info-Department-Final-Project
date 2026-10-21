@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
+import { useLanguage } from "../i18n";
 
 interface PreviewSettings {
   scalePercent: number;
@@ -132,6 +133,7 @@ export function ThreeModelPreview({
   supportType,
   brimEnabled,
 }: ThreeModelPreviewProps) {
+  const { tx } = useLanguage();
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PreviewRuntime | null>(null);
   const loadSequenceRef = useRef(0);
@@ -144,7 +146,7 @@ export function ThreeModelPreview({
     supportType,
     brimEnabled,
   });
-  const [dimensions, setDimensions] = useState("尚未載入模型");
+  const [dimensions, setDimensions] = useState(tx("尚未載入模型", "No model loaded"));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -173,7 +175,7 @@ export function ThreeModelPreview({
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     } catch {
-      setError("瀏覽器無法啟動 3D 預覽，請確認 WebGL 已啟用");
+      setError(tx("瀏覽器無法啟動 3D 預覽，請確認 WebGL 已啟用", "Browser failed to initialize 3D preview, please verify WebGL is enabled"));
       return;
     }
 
@@ -257,7 +259,7 @@ export function ThreeModelPreview({
       if (runtimeRef.current === runtime) runtimeRef.current = null;
       host.replaceChildren();
     };
-  }, []);
+  }, [tx]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -272,7 +274,7 @@ export function ThreeModelPreview({
     }
 
     if (!file) {
-      setDimensions("尚未載入模型");
+      setDimensions(tx("尚未載入模型", "No model loaded"));
       setError("");
       setLoading(false);
       return;
@@ -280,12 +282,12 @@ export function ThreeModelPreview({
 
     setLoading(true);
     setError("");
-    setDimensions("讀取模型中…");
+    setDimensions(tx("讀取模型中…", "Loading model..."));
 
     const loadModel = async () => {
       try {
         const extension = file.name.split(".").pop()?.toLowerCase();
-        if (extension !== "stl" && extension !== "3mf") throw new Error("只支援 STL 或 3MF 預覽");
+        if (extension !== "stl" && extension !== "3mf") throw new Error(tx("只支援 STL 或 3MF 預覽", "Only STL and 3MF preview is supported"));
 
         const buffer = await file.arrayBuffer();
         if (sequence !== loadSequenceRef.current || runtimeRef.current !== runtime) return;
@@ -314,7 +316,7 @@ export function ThreeModelPreview({
               side: THREE.DoubleSide,
             });
           });
-          if (meshCount === 0) throw new Error("3MF 內沒有可預覽的模型");
+          if (meshCount === 0) throw new Error(tx("3MF 內沒有可預覽的模型", "No previewable models found in 3MF"));
         }
 
         if (sequence !== loadSequenceRef.current || runtimeRef.current !== runtime) {
@@ -329,13 +331,13 @@ export function ThreeModelPreview({
         runtime.scene.add(object);
 
         const result = applyModelSettings(runtime, settingsRef.current, true);
-        if (!result) throw new Error("模型載入失敗");
+        if (!result) throw new Error(tx("模型載入失敗", "Failed to load model"));
         setDimensions(result.dimensions);
-        setError(result.outOfBounds ? "模型超出 P1S 256 × 256 × 256 mm 成形範圍" : "");
+        setError(result.outOfBounds ? tx("模型超出 P1S 256 × 256 × 256 mm 成形範圍", "Model exceeds P1S 256 × 256 × 256 mm build volume") : "");
       } catch (loadError) {
         if (sequence === loadSequenceRef.current) {
-          setError(loadError instanceof Error ? loadError.message : "無法預覽此模型");
-          setDimensions("預覽載入失敗");
+          setError(loadError instanceof Error ? loadError.message : tx("無法預覽此模型", "Unable to preview this model"));
+          setDimensions(tx("預覽載入失敗", "Preview load failed"));
         }
       } finally {
         if (sequence === loadSequenceRef.current) setLoading(false);
@@ -343,7 +345,7 @@ export function ThreeModelPreview({
     };
 
     void loadModel();
-  }, [file]);
+  }, [file, tx]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -352,11 +354,11 @@ export function ThreeModelPreview({
       const result = applyModelSettings(runtime, settingsRef.current, false);
       if (!result) return;
       setDimensions(result.dimensions);
-      setError(result.outOfBounds ? "模型超出 P1S 256 × 256 × 256 mm 成形範圍" : "");
+      setError(result.outOfBounds ? tx("模型超出 P1S 256 × 256 × 256 mm 成形範圍", "Model exceeds P1S 256 × 256 × 256 mm build volume") : "");
     } catch (settingsError) {
-      setError(settingsError instanceof Error ? settingsError.message : "預覽更新失敗");
+      setError(settingsError instanceof Error ? settingsError.message : tx("預覽更新失敗", "Preview update failed"));
     }
-  }, [scalePercent, autoOrient, brimEnabled]);
+  }, [scalePercent, autoOrient, brimEnabled, tx]);
 
   return (
     <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950">
@@ -365,8 +367,8 @@ export function ThreeModelPreview({
         {!file && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center bg-slate-950/20 text-center">
             <div>
-              <div className="text-base font-medium text-slate-300">上傳 STL 或 3MF 查看模型</div>
-              <div className="mt-1 text-sm text-slate-500">可拖曳旋轉，滾輪縮放</div>
+              <div className="text-base font-medium text-slate-300">{tx("上傳 STL 或 3MF 查看模型", "Upload STL or 3MF to preview model")}</div>
+              <div className="mt-1 text-sm text-slate-500">{tx("可拖曳旋轉，滾輪縮放", "Drag to rotate, scroll to zoom")}</div>
             </div>
           </div>
         )}
@@ -392,7 +394,7 @@ export function ThreeModelPreview({
           <span className={`rounded-md border px-2 py-1 ${brimEnabled ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-700 bg-slate-900 text-slate-400"}`}>Brim {brimEnabled ? "ON" : "OFF"}</span>
         </div>
         <p className="mt-2 text-xs text-slate-600">
-          Scale、Auto orient 與 Brim 會更新 3D 畫面；Layer、Infill、Support 為切片內部設定，最終結果以伺服器切片為準。
+          {tx("Scale、Auto orient 與 Brim 會更新 3D 畫面；Layer、Infill、Support 為切片內部設定，最終結果以伺服器切片為準。", "Scale, Auto orient, and Brim update the 3D scene; Layer, Infill, and Support are slicer parameters whose effect will be finalized during slicing.")}
         </p>
       </div>
     </div>

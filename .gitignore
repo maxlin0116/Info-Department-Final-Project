@@ -15,3 +15,5 @@ prod-support/bambu-studio/squashfs-root/
 *credentials*.csv
 *credentials*.json
 backend/scripts/output/
+venv/
+.venv/

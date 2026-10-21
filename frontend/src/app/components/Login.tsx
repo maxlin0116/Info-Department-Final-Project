@@ -2,11 +2,13 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Cpu, ArrowRight } from "lucide-react";
 import { useAuth } from "../auth";
+import { useLanguage } from "../i18n";
 import { PasswordInput } from "./PasswordInput";
 
 export function Login() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
+  const { tx } = useLanguage();
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
   const [asAdmin, setAsAdmin] = useState(false);
@@ -31,7 +33,7 @@ export function Login() {
         navigate("/", { replace: true });
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Login failed");
+      setError(submitError instanceof Error ? submitError.message : tx("登入失敗", "Login failed"));
     } finally {
       setSubmitting(false);
     }
@@ -44,32 +46,32 @@ export function Login() {
           <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 shadow-[0_0_20px_rgba(16,185,129,0.15)] mb-4">
             <Cpu className="w-8 h-8 text-emerald-400" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Welcome Back</h1>
-          <p className="text-slate-400 mt-2 text-sm">Sign in to reserve MakerSpace equipment</p>
+          <h1 className="text-2xl font-bold text-slate-100 tracking-tight">{tx("歡迎回來", "Welcome Back")}</h1>
+          <p className="text-slate-400 mt-2 text-sm">{tx("請登入以預約 MakerSpace 空間與設備", "Sign in to reserve MakerSpace equipment")}</p>
         </div>
 
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-300">Student ID</label>
+              <label className="text-sm font-medium text-slate-300">{tx("學號", "Student ID")}</label>
               <input
                 type="text"
                 required
                 value={studentId}
                 onChange={(event) => setStudentId(event.target.value)}
-                placeholder="e.g. b10901001"
+                placeholder={tx("例如：b10901001", "e.g. b10901001")}
                 className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
               />
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-3">
-                <label className="text-sm font-medium text-slate-300">Password</label>
+                <label className="text-sm font-medium text-slate-300">{tx("密碼", "Password")}</label>
                 <Link
                   to="/forgot-password"
                   className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
                 >
-                  Forgot password?
+                  {tx("忘記密碼？", "Forgot password?")}
                 </Link>
               </div>
               <PasswordInput
@@ -93,21 +95,21 @@ export function Login() {
                 className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/50"
               />
               <div>
-                <div className="text-sm font-medium text-slate-200">Admin login</div>
+                <div className="text-sm font-medium text-slate-200">{tx("管理員登入", "Admin login")}</div>
                 <div className="text-xs text-slate-500">
-                  Use your account password plus the shared admin access password.
+                  {tx("使用您的個人密碼加上管理員共用通行密碼登入。", "Use your account password plus the shared admin access password.")}
                 </div>
               </div>
             </label>
 
             {asAdmin ? (
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">Admin Access Password</label>
+                <label className="text-sm font-medium text-slate-300">{tx("管理員通行密碼", "Admin Access Password")}</label>
                 <PasswordInput
                   required
                   value={adminPassword}
                   onChange={(event) => setAdminPassword(event.target.value)}
-                  placeholder="Enter admin access password"
+                  placeholder={tx("請輸入管理員通行密碼", "Enter admin access password")}
                   focusTone="amber"
                 />
               </div>
@@ -125,19 +127,22 @@ export function Login() {
                 disabled={submitting}
                 className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2"
               >
-                {submitting ? "Signing In..." : "Log In"}
+                {submitting ? tx("登入中...", "Signing In...") : tx("登入", "Log In")}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
 
           <div className="mt-6 p-3.5 rounded-xl border border-slate-800 bg-slate-950/70 text-center text-xs text-slate-400 leading-relaxed">
-            <span className="font-semibold text-slate-300 block mb-1">Need an account?</span>
-            Accounts are centrally assigned by MakerSpace administration. If you have not received your login credentials, please contact the lab administrator.
+            <span className="font-semibold text-slate-300 block mb-1">{tx("還沒有帳號嗎？", "Need an account?")}</span>
+            {tx(
+              "帳號由 MakerSpace 管理單位統一建立與核發。若您尚未收到登入資訊，請聯繫實驗室管理員。",
+              "Accounts are centrally assigned by MakerSpace administration. If you have not received your login credentials, please contact the lab administrator."
+            )}
           </div>
           <div className="mt-4 text-center text-xs text-slate-500">
             <Link to="/privacy" className="hover:text-emerald-300 transition-colors">
-              Privacy Policy
+              {tx("隱私權政策", "Privacy Policy")}
             </Link>
           </div>
         </div>

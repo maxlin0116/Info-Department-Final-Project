@@ -11,30 +11,8 @@ import {
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
-
-interface AreaSummary {
-  id: string;
-  name: string;
-  type: string;
-  maxCapacity: number;
-  description: string;
-  showPrintingStatus: boolean;
-  isActive: boolean;
-  bookingMode: "schedule" | "queue";
-  serviceType: "meeting" | "soldering" | "3dp" | "laser";
-}
-
-interface AreaStatusItem {
-  area: AreaSummary;
-  usedCount: number;
-  remainingCapacity: number;
-  activeReservationCount: number;
-  isFull: boolean;
-  hasActivePrinting: boolean;
-  queueLength?: number;
-  machineStatus?: string;
-  serviceOpen?: boolean;
-}
+import { translateAreaDescription, translateAreaName, useLanguage } from "../i18n";
+import type { AreaSummary, AreaStatusItem } from "./Dashboard";
 
 interface AllAreasOverviewProps {
   areas: AreaStatusItem[];
@@ -42,6 +20,7 @@ interface AllAreasOverviewProps {
 }
 
 export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps) {
+  const { lang, tx } = useLanguage();
   const scheduleAreas = areas.filter((a) => a.area.bookingMode !== "queue");
   const queueAreas = areas.filter((a) => a.area.bookingMode === "queue");
 
@@ -55,17 +34,20 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
               <Layers className="w-4 h-4" />
             </span>
             <h2 className="text-lg font-bold font-mono text-slate-100 tracking-tight uppercase">
-              MakerSpace Reservation Status
+              {tx("MakerSpace 空間預約狀態", "MakerSpace Reservation Status")}
             </h2>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Live capacity and the five-day reservation schedule for bookable spaces.
+            {tx(
+              "即時座位使用容量與未來五個營業日的空間預約時段。",
+              "Live capacity and the five-day reservation schedule for bookable spaces."
+            )}
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>LIVE_MONITORING</span>
+          <span>{tx("即時監控中", "LIVE_MONITORING")}</span>
         </div>
       </div>
 
@@ -74,9 +56,11 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold font-mono tracking-widest text-slate-400 uppercase flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-            SCHEDULED WORKSTATIONS
+            {tx("可預約工作空間", "SCHEDULED WORKSTATIONS")}
           </h3>
-          <span className="text-[10px] font-mono text-slate-500">Click area to open full 5-day calendar</span>
+          <span className="text-[10px] font-mono text-slate-500">
+            {tx("點選區域以開啟完整 5 日時段表", "Click area to open full 5-day calendar")}
+          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -97,9 +81,11 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
                     </div>
                     <div>
                       <h4 className="text-sm font-bold font-mono text-slate-100 group-hover:text-emerald-300 transition-colors">
-                        {item.area.name}
+                        {translateAreaName(item.area.name, lang)}
                       </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{item.area.description}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                        {translateAreaDescription(item.area.description, lang)}
+                      </p>
                     </div>
                   </div>
 
@@ -112,16 +98,23 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
                           : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                     }`}
                   >
-                    {item.isFull ? "FULL" : item.usedCount > 0 ? "IN USE" : "AVAILABLE"}
+                    {item.isFull
+                      ? tx("已滿", "FULL")
+                      : item.usedCount > 0
+                        ? tx("使用中", "IN USE")
+                        : tx("可預約", "AVAILABLE")}
                   </span>
                 </div>
 
                 {/* Progress bar */}
                 <div className="space-y-1.5 font-mono">
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-500">Live Seat Occupancy</span>
+                    <span className="text-slate-500">{tx("即時座位使用率", "Live Seat Occupancy")}</span>
                     <span className="text-slate-200 font-bold">
-                      {item.usedCount} / {item.area.maxCapacity} seats ({occupancyRate}%)
+                      {tx(
+                        `${item.usedCount} / ${item.area.maxCapacity} 個座位 (${occupancyRate}%)`,
+                        `${item.usedCount} / ${item.area.maxCapacity} seats (${occupancyRate}%)`
+                      )}
                     </span>
                   </div>
                   <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
@@ -139,7 +132,9 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
                 </div>
 
                 <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-emerald-400 group-hover:text-emerald-300">
-                  <span className="text-[11px] text-slate-500">Open 5-day schedule & book &rarr;</span>
+                  <span className="text-[11px] text-slate-500">
+                    {tx("開啟 5 日時間表並預約 →", "Open 5-day schedule & book →")}
+                  </span>
                   <ChevronRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -153,13 +148,13 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold font-mono tracking-widest text-slate-400 uppercase flex items-center gap-1.5">
             <Flame className="w-3.5 h-3.5 text-amber-400" />
-            FABRICATION QUEUES & TELEMETRY
+            {tx("加工佇列與設備狀態", "FABRICATION QUEUES & TELEMETRY")}
           </h3>
           <Link
             to="/fabrication/queues"
             className="text-[10px] font-mono text-cyan-400 hover:text-cyan-300 transition-colors"
           >
-            VIEW_PUBLIC_QUEUE &rarr;
+            {tx("查看公開佇列 →", "VIEW_PUBLIC_QUEUE →")}
           </Link>
         </div>
 
@@ -181,10 +176,12 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
                     </div>
                     <div>
                       <h4 className="text-sm font-bold font-mono text-slate-100 group-hover:text-amber-300 transition-colors">
-                        {item.area.name}
+                        {translateAreaName(item.area.name, lang)}
                       </h4>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        {is3dp ? "Bambu Lab P1S (0.4mm PLA)" : "High-precision Laser Cutter"}
+                        {is3dp
+                          ? "Bambu Lab P1S (0.4mm PLA)"
+                          : tx("高精準度 CO2 雷射切割機", "High-precision Laser Cutter")}
                       </p>
                     </div>
                   </div>
@@ -204,22 +201,24 @@ export function AllAreasOverview({ areas, onSelectArea }: AllAreasOverviewProps)
 
                 <div className="grid grid-cols-2 gap-3 font-mono text-xs">
                   <div className="p-2.5 rounded-lg border border-slate-800/80 bg-slate-900/50">
-                    <div className="text-[10px] text-slate-500 uppercase">Current Job</div>
+                    <div className="text-[10px] text-slate-500 uppercase">{tx("目前工作", "Current Job")}</div>
                     <div className="text-slate-200 font-bold mt-0.5">
-                      {item.hasActivePrinting ? "Printing Active" : "Machine Idle"}
+                      {item.hasActivePrinting ? tx("列印進行中", "Printing Active") : tx("機台閒置中", "Machine Idle")}
                     </div>
                   </div>
 
                   <div className="p-2.5 rounded-lg border border-slate-800/80 bg-slate-900/50">
-                    <div className="text-[10px] text-slate-500 uppercase">Waitlist</div>
+                    <div className="text-[10px] text-slate-500 uppercase">{tx("等候清單", "Waitlist")}</div>
                     <div className="text-slate-200 font-bold mt-0.5">
-                      {item.queueLength || 0} queued job(s)
+                      {tx(`${item.queueLength || 0} 件排隊中`, `${item.queueLength || 0} queued job(s)`)}
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-cyan-400 group-hover:text-cyan-300">
-                  <span className="text-[11px] text-slate-500">Upload file & enter queue &rarr;</span>
+                  <span className="text-[11px] text-slate-500">
+                    {tx("上傳檔案並加入排隊 →", "Upload file & enter queue →")}
+                  </span>
                   <ChevronRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>

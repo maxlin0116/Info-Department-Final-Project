@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { translateAreaName, translateDayLabel, useLanguage } from "../i18n";
 
 export interface AvailabilitySlot {
   time: string;
@@ -122,6 +123,7 @@ export function ScheduleMatrixView({
   onSelectSlot,
   refreshNonce = 0,
 }: ScheduleMatrixViewProps) {
+  const { lang, tx } = useLanguage();
   const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -179,7 +181,7 @@ export function ScheduleMatrixView({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load schedule");
+          setError(err instanceof Error ? err.message : tx("無法載入時間表", "Failed to load schedule"));
         }
       } finally {
         if (!cancelled) {
@@ -215,7 +217,12 @@ export function ScheduleMatrixView({
     const range = day ? getSelectableRange(day, firstTime, lastTime) : null;
 
     if (!range) {
-      setSelectionError("所選區間包含已額滿、已過期或不連續的時段，請改選同一天內的連續可用時段。");
+      setSelectionError(
+        tx(
+          "所選區間包含已額滿、已過期或不連續的時段，請改選同一天內的連續可用時段。",
+          "The selected range includes full, expired, or non-contiguous slots. Please select continuous available slots on the same day."
+        )
+      );
       return false;
     }
 
@@ -256,7 +263,7 @@ export function ScheduleMatrixView({
 
     dragMovedRef.current = true;
     if (origin.date !== date) {
-      setSelectionError("一次只能選取同一天的連續時段。");
+      setSelectionError(tx("一次只能選取同一天的連續時段。", "You can only select continuous slots on the same day."));
       return;
     }
 
@@ -274,14 +281,17 @@ export function ScheduleMatrixView({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold font-mono text-slate-100 uppercase tracking-tight">
-                {areaName}
+                {translateAreaName(areaName, lang)}
               </h2>
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono border border-slate-700">
-                Max: {effectiveMaxCapacity} seats
+                {tx(`上限：${effectiveMaxCapacity} 人`, `Max: ${effectiveMaxCapacity} seats`)}
               </span>
             </div>
             <p className="text-xs text-slate-400 font-sans mt-0.5">
-              Click a start and end slot, or drag across slots, to select a continuous reservation period.
+              {tx(
+                "點選起訖時段或按住拖曳，即可選取連續預約區間。",
+                "Click a start and end slot, or drag across slots, to select a continuous reservation period."
+              )}
             </p>
           </div>
         </div>
@@ -291,19 +301,19 @@ export function ScheduleMatrixView({
           <div className="flex items-center gap-3 text-[10px] font-mono font-medium text-slate-400">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/40" />
-              Free
+              {tx("空閒", "Free")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-amber-500/20 border border-amber-500/40" />
-              Occupied
+              {tx("部分佔用", "Occupied")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-rose-500/20 border border-rose-500/40" />
-              Full
+              {tx("已滿", "Full")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-slate-950 border border-slate-800" />
-              Closed
+              {tx("不開放", "Closed")}
             </span>
           </div>
 
@@ -311,7 +321,7 @@ export function ScheduleMatrixView({
             onClick={() => setLocalNonce((n) => n + 1)}
             disabled={loading}
             className="p-1.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Refresh availability"
+            title={tx("重新整理時段", "Refresh availability")}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -323,7 +333,7 @@ export function ScheduleMatrixView({
         {loading && !availability ? (
           <div className="flex flex-col items-center justify-center h-80 text-slate-500 space-y-3 font-mono text-xs">
             <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
-            <span>CONNECTING_TO_TERMINAL_SCHEDULE...</span>
+            <span>{tx("正在連線載入時間表...", "CONNECTING_TO_TERMINAL_SCHEDULE...")}</span>
           </div>
         ) : error ? (
           <div className="p-6 text-center space-y-3">
@@ -333,7 +343,7 @@ export function ScheduleMatrixView({
               onClick={() => setLocalNonce((n) => n + 1)}
               className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono text-slate-200 hover:bg-slate-700 cursor-pointer"
             >
-              Retry Connection
+              {tx("重新連線", "Retry Connection")}
             </button>
           </div>
         ) : (
@@ -341,7 +351,7 @@ export function ScheduleMatrixView({
             {/* Weekday Date Headers */}
             <div className="flex border-b border-slate-800/80 pb-2.5 mb-2">
               <div className="w-14 sm:w-16 shrink-0 pr-1.5 sm:pr-2 text-[9px] sm:text-[10px] uppercase font-mono font-bold text-slate-500 flex items-center justify-end">
-                SLOT
+                {tx("時段", "SLOT")}
               </div>
               {availability?.dates.map((day) => (
                 <div
@@ -353,7 +363,7 @@ export function ScheduleMatrixView({
                   }`}
                 >
                   <span className="text-[11px] sm:text-xs font-bold font-mono text-slate-200 tracking-wider uppercase truncate w-full">
-                    {day.dayLabel}
+                    {translateDayLabel(day.dayLabel, lang)}
                   </span>
                   <span className="text-[10px] sm:text-[11px] font-mono text-slate-500 truncate w-full">{day.display}</span>
                 </div>
@@ -413,27 +423,34 @@ export function ScheduleMatrixView({
 
                       if (!slot.isOpen) {
                         cellBg = "bg-slate-950/80 border-slate-900 text-slate-700 cursor-not-allowed";
-                        label = "CLOSED";
+                        label = tx("關閉", "CLOSED");
                         badgeColor = "bg-slate-950 text-slate-700 border-slate-900";
                       } else if (isPast) {
                         cellBg = "bg-slate-950/60 border-slate-900/80 text-slate-600 cursor-not-allowed";
-                        label = "PAST";
+                        label = tx("已過期", "PAST");
                         badgeColor = "bg-slate-950 text-slate-700 border-slate-900";
                       } else if (isSelected) {
                         cellBg = "bg-emerald-500/25 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400";
                         badgeColor = "bg-emerald-500 text-slate-950 font-bold border-emerald-400";
-                        label = isRangeStart && isRangeEnd ? "SELECTED" : isRangeStart ? "START" : isRangeEnd ? "END" : "SELECTED";
+                        label =
+                          isRangeStart && isRangeEnd
+                            ? tx("已選取", "SELECTED")
+                            : isRangeStart
+                              ? tx("起點", "START")
+                              : isRangeEnd
+                                ? tx("終點", "END")
+                                : tx("已選取", "SELECTED");
                       } else if (slot.isFull) {
                         cellBg = "bg-rose-500/10 border-rose-500/30 text-rose-300";
                         badgeColor = "bg-rose-500/20 text-rose-300 border-rose-500/40";
-                        label = "FULL";
+                        label = tx("已滿", "FULL");
                       } else if (slot.occupiedCount > 0) {
                         cellBg = "bg-amber-500/10 border-amber-500/30 text-amber-200 hover:bg-amber-500/20";
                         badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/40";
                       } else {
                         cellBg = "bg-slate-900/60 border-slate-800 hover:bg-emerald-500/15 hover:border-emerald-500/50 text-slate-300";
                         badgeColor = "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-                        label = "FREE";
+                        label = tx("空閒", "FREE");
                       }
 
                       return (
@@ -452,7 +469,10 @@ export function ScheduleMatrixView({
                           className={`flex-1 min-w-0 mx-0.5 sm:mx-1 px-1.5 sm:px-2 py-1 rounded-lg border flex items-center justify-between transition-all font-mono text-xs select-none ${cellBg} ${
                             isClickable ? "cursor-pointer active:scale-[0.98]" : ""
                           } ${isAnchor ? "outline outline-2 outline-offset-1 outline-cyan-400" : ""}`}
-                          title={`${day.date} ${slot.time}-${slot.endTime}: ${slot.occupiedCount}/${effectiveMaxCapacity} occupied`}
+                          title={tx(
+                            `${day.date} ${slot.time}-${slot.endTime}：已預約 ${slot.occupiedCount}/${effectiveMaxCapacity} 人`,
+                            `${day.date} ${slot.time}-${slot.endTime}: ${slot.occupiedCount}/${effectiveMaxCapacity} occupied`
+                          )}
                         >
                           <span className="text-[10px] sm:text-[11px] font-semibold tracking-tighter truncate">
                             {slot.time}
@@ -485,7 +505,10 @@ export function ScheduleMatrixView({
       <div className="px-5 py-3 border-t border-slate-800/80 bg-slate-950/80 text-[11px] font-mono text-slate-500 flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-          Click the first and last slot, or hold and drag, to select a continuous period.
+          {tx(
+            "點選起始與結束時段，或按住滑鼠拖曳選取連續時段。",
+            "Click the first and last slot, or hold and drag, to select a continuous period."
+          )}
         </span>
         <span className="flex items-center gap-3">
           {selectedDate && selectedStartTime && selectedEndTime && (

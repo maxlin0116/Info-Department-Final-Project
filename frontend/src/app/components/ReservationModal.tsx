@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, Gauge, LogIn } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
+import { useLanguage, translateAreaName, translateDayLabel } from "../i18n";
 import { QuotaInfo } from "./QuotaInfo";
 
 interface ReservationModalProps {
@@ -189,6 +190,7 @@ export function ReservationModal({
 }: ReservationModalProps) {
   const navigate = useNavigate();
   const { token, isAuthenticated, logout } = useAuth();
+  const { lang, tx } = useLanguage();
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -371,11 +373,11 @@ export function ReservationModal({
     }
 
     if (selectedSlots.length === 0) {
-      return "Please choose a valid reservation time range.";
+      return tx("請選擇有效的預約時段範圍。", "Please choose a valid reservation time range.");
     }
 
     if (selectedSlots.some((slot) => !slot.isOpen)) {
-      return "The selected time range includes unavailable time slots.";
+      return tx("所選時段包含無法預約的時段。", "The selected time range includes unavailable time slots.");
     }
 
     const minimumRemainingCapacity = selectedSlots.reduce(
@@ -384,11 +386,14 @@ export function ReservationModal({
     );
 
     if (minimumRemainingCapacity < selectedPeople) {
-      return `The selected time range only has ${Math.max(minimumRemainingCapacity, 0)} remaining spot(s) for ${selectedPeople} participant(s).`;
+      return tx(
+        `所選時段僅剩餘 ${Math.max(minimumRemainingCapacity, 0)} 個名額，無法容納 ${selectedPeople} 位參與者。`,
+        `The selected time range only has ${Math.max(minimumRemainingCapacity, 0)} remaining spot(s) for ${selectedPeople} participant(s).`
+      );
     }
 
     return null;
-  }, [selectedDateAvailability, startTime, endTime, selectedPeople, selectedSlots]);
+  }, [selectedDateAvailability, startTime, endTime, selectedPeople, selectedSlots, tx]);
 
   const selectedQuotaCost = useMemo(() => {
     return getQuotaCost(startTime, endTime, selectedPeople, quotaSlotMinutes);
@@ -400,22 +405,25 @@ export function ReservationModal({
     }
 
     if (selectedQuotaCost > quota.remaining) {
-      return `This reservation uses ${selectedQuotaCost} quota point(s), but only ${quota.remaining} remain.`;
+      return tx(
+        `此預約需消耗 ${selectedQuotaCost} 點額度，但您僅剩 ${quota.remaining} 點。`,
+        `This reservation uses ${selectedQuotaCost} quota point(s), but only ${quota.remaining} remain.`
+      );
     }
 
     return null;
-  }, [quota, selectedQuotaCost]);
+  }, [quota, selectedQuotaCost, tx]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!isAuthenticated || !token) {
-      setError("Please log in before making a reservation.");
+      setError(tx("請先登入後再進行預約。", "Please log in before making a reservation."));
       return;
     }
 
     if (!areaId || !date || !startTime || !endTime) {
-      setError("Please choose a valid reservation time range.");
+      setError(tx("請選擇有效的預約時段範圍。", "Please choose a valid reservation time range."));
       return;
     }
 
@@ -440,7 +448,7 @@ export function ReservationModal({
           startTime: toBusinessIsoDateTime(date, startTime),
           endTime: toBusinessIsoDateTime(date, endTime),
           participantCount: selectedPeople,
-          purpose: purpose.trim() || `${resourceName} reservation`,
+          purpose: purpose.trim() || `${translateAreaName(resourceName, lang)} reservation`,
           plannedItems: parsePlannedItems(plannedItemsInput),
           when2meet: when2meet.trim(),
           project: projectNotes.trim(),
@@ -449,7 +457,7 @@ export function ReservationModal({
 
       if (response.status === 401) {
         logout();
-        throw new Error("Your session expired. Please log in again.");
+        throw new Error(tx("您的連線已過期，請重新登入。", "Your session expired. Please log in again."));
       }
 
       if (!response.ok) {
@@ -462,7 +470,7 @@ export function ReservationModal({
         onClose();
       }, 1600);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Reservation failed");
+      setError(submitError instanceof Error ? submitError.message : tx("預約失敗", "Reservation failed"));
     } finally {
       setSubmitting(false);
     }
@@ -538,8 +546,8 @@ export function ReservationModal({
 
             <div className="w-full md:w-2/5 p-8 border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/50 overflow-y-auto custom-scrollbar">
               <div className="mb-6">
-                <h2 className="text-xl font-bold text-slate-100 mb-1 font-mono tracking-tight uppercase">Reserve Space</h2>
-                <p className="text-sm text-emerald-400 font-mono font-medium tracking-wide">[{resourceName}]</p>
+                <h2 className="text-xl font-bold text-slate-100 mb-1 font-mono tracking-tight uppercase">{tx("預約空間", "Reserve Space")}</h2>
+                <p className="text-sm text-emerald-400 font-mono font-medium tracking-wide">[{translateAreaName(resourceName, lang)}]</p>
               </div>
 
               <AnimatePresence mode="wait">
@@ -554,7 +562,7 @@ export function ReservationModal({
                       <CheckCircle2 className="w-8 h-8 text-emerald-400" />
                     </div>
                     <h3 className="text-lg font-semibold text-slate-100 font-mono">RESERVATION_SUBMITTED</h3>
-                    <p className="text-sm text-slate-400 mt-2 font-sans italic">Your booking is saved and waiting for admin review.</p>
+                    <p className="text-sm text-slate-400 mt-2 font-sans italic">{tx("您的預約已送出，正等待管理員審核。", "Your booking is saved and waiting for admin review.")}</p>
                   </motion.div>
                 ) : (
                   <motion.form
@@ -566,8 +574,8 @@ export function ReservationModal({
                   >
                     {!isAuthenticated && (
                       <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
-                        <div className="font-medium font-mono">AUTH_REQUIRED</div>
-                        <div className="mt-1 text-sky-100/80 text-xs">Login required to confirm reservations.</div>
+                        <div className="font-medium font-mono">{tx("需要登入", "AUTH_REQUIRED")}</div>
+                        <div className="mt-1 text-sky-100/80 text-xs">{tx("登入帳號後即可送出預約。", "Login required to confirm reservations.")}</div>
                         <button
                           type="button"
                           onClick={() => {
@@ -577,7 +585,7 @@ export function ReservationModal({
                           className="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-mono font-medium text-sky-100 hover:bg-sky-400/20 cursor-pointer transition-colors"
                         >
                           <LogIn className="w-3.5 h-3.5" />
-                          GOTO_LOGIN
+                          {tx("前往登入", "GOTO_LOGIN")}
                         </button>
                       </div>
                     )}
@@ -603,17 +611,17 @@ export function ReservationModal({
                         <div className="flex items-center justify-between gap-3">
                           <span className="inline-flex items-center gap-2 uppercase tracking-widest">
                             <Gauge className="w-3.5 h-3.5" />
-                            RSVN_QUOTA
+                            {tx("預約額度", "RSVN_QUOTA")}
                             <QuotaInfo />
                           </span>
                           <span className="shrink-0">
-                            {quota.remaining}/{quota.limit} LEFT
+                            {quota.remaining}/{quota.limit} {tx("剩餘", "LEFT")}
                           </span>
                         </div>
                         <div className="mt-2 text-[11px] text-slate-400">
                           {selectedQuotaCost > 0
-                            ? `REQUEST_COST: ${selectedQuotaCost} · ${quota.used}_USED`
-                            : `${quota.used}_USED · ${quota.slotMinutes}MIN/PAX`}
+                            ? tx(`預估扣除: ${selectedQuotaCost} · 已使用 ${quota.used}`, `REQUEST_COST: ${selectedQuotaCost} · ${quota.used}_USED`)
+                            : tx(`已使用 ${quota.used} · 每次 ${quota.slotMinutes} 分鐘/人`, `${quota.used}_USED · ${quota.slotMinutes}MIN/PAX`)}
                         </div>
                         {quotaIssue ? <div className="mt-2 text-[11px] text-rose-200">{quotaIssue}</div> : null}
                       </div>
@@ -622,7 +630,7 @@ export function ReservationModal({
                     <div className="space-y-1.5">
                       <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">
                         <Calendar className="w-3 h-3" />
-                        Date_Select
+                        {tx("選擇日期", "Date_Select")}
                       </label>
                       <div className="relative">
                         <select
@@ -637,11 +645,11 @@ export function ReservationModal({
                           className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm cursor-pointer"
                         >
                           <option value="" disabled>
-                            {loading ? "LOAD_AVAL..." : "SELECT_SESSION_DATE..."}
+                            {loading ? tx("載入可用時段...", "LOAD_AVAL...") : tx("請選擇預約日期...", "SELECT_SESSION_DATE...")}
                           </option>
                           {availability?.dates.map((entry) => (
                             <option key={entry.date} value={entry.date}>
-                              {entry.display} ({entry.dayLabel})
+                              {entry.display} ({translateDayLabel(entry.dayLabel, lang)})
                             </option>
                           ))}
                         </select>
@@ -656,7 +664,7 @@ export function ReservationModal({
                     <div className="space-y-1.5">
                       <label className="text-[11px] uppercase tracking-widest font-mono text-slate-500 flex items-center gap-2">
                         <Clock className="w-3 h-3" />
-                        Time_Range
+                        {tx("時段範圍", "Time_Range")}
                       </label>
                     <div className="flex items-center gap-2">
                       <div className="flex-1">
@@ -670,7 +678,7 @@ export function ReservationModal({
                             }}
                             className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none text-xs font-mono disabled:opacity-50 cursor-pointer"
                         >
-                          <option value="" disabled>START_T</option>
+                          <option value="" disabled>{tx("開始時間", "START_T")}</option>
                           {selectedStartTimeOptions.map((time) => (
                               <option key={time} value={time}>
                                 {formatSlotLabel(time, selectedDateSlotMap.get(time) ?? time)}
@@ -687,7 +695,7 @@ export function ReservationModal({
                             onChange={(event) => setEndTime(event.target.value)}
                             className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none text-xs font-mono disabled:opacity-50 cursor-pointer"
                         >
-                          <option value="" disabled>END_T</option>
+                          <option value="" disabled>{tx("結束時間", "END_T")}</option>
                           {selectedEndTimeOptions.map((time) => (
                               <option key={time} value={time}>
                                 {startTime ? `${startTime}-${time}` : time}
@@ -701,8 +709,8 @@ export function ReservationModal({
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
                         <UsersIcon className="w-4 h-4 text-slate-500" />
-                        Number of People
-                        <span className="text-xs text-slate-500 font-normal ml-auto">Max capacity: {effectiveMaxCapacity}</span>
+                        {tx("使用人數", "Number of People")}
+                        <span className="text-xs text-slate-500 font-normal ml-auto">{tx("容量上限: ", "Max capacity: ") + effectiveMaxCapacity}</span>
                       </label>
                       <input
                         type="number"
@@ -723,53 +731,53 @@ export function ReservationModal({
                       <p className={`text-xs ${selectionCapacityIssue ? "text-amber-300" : "text-slate-500"}`}>
                         {selectionCapacityIssue
                           ? selectionCapacityIssue
-                          : "Selected time stays locked even if the participant count exceeds slot capacity."}
+                          : tx("選取時段將保留，即使人數超過該時段上限。", "Selected time stays locked even if the participant count exceeds slot capacity.")}
                       </p>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">Purpose</label>
+                      <label className="text-sm font-medium text-slate-300">{tx("預約用途", "Purpose")}</label>
                       <input
                         type="text"
                         value={purpose}
                         onChange={(event) => setPurpose(event.target.value)}
-                        placeholder="Purpose of use"
+                        placeholder={tx("使用用途說明", "Purpose of use")}
                         className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">Planned Items</label>
+                      <label className="text-sm font-medium text-slate-300">{tx("預計使用設備／耗材", "Planned Items")}</label>
                       <textarea
                         rows={3}
                         value={plannedItemsInput}
                         onChange={(event) => setPlannedItemsInput(event.target.value)}
-                        placeholder={"One item per line\nArduino series\nESP series\nBreadboard"}
+                        placeholder={tx("每行填寫一項\nArduino 系列\nESP 系列\n麵包板", "One item per line\nArduino series\nESP series\nBreadboard")}
                         className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
                       />
                       <p className="text-xs text-slate-500">
-                        Optional list of items or equipment the user plans to use.
+                        {tx("使用者預計使用的耗材或器材清單（選填）。", "Optional list of items or equipment the user plans to use.")}
                       </p>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">Project</label>
+                      <label className="text-sm font-medium text-slate-300">{tx("專案／專題", "Project")}</label>
                       <textarea
                         rows={3}
                         value={projectNotes}
                         onChange={(event) => setProjectNotes(event.target.value)}
-                        placeholder="Optional project name or project description"
+                        placeholder={tx("選填專案名稱或專題說明", "Optional project name or project description")}
                         className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-y"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-300">When2meet</label>
+                      <label className="text-sm font-medium text-slate-300">{tx("When2meet 連結", "When2meet")}</label>
                       <textarea
                         rows={2}
                         value={when2meet}
                         onChange={(event) => setWhen2meet(event.target.value)}
-                        placeholder={"Optional scheduling reference\nor when2meet link"}
+                        placeholder={tx("選填時段媒合參考或 when2meet 連結", "Optional scheduling reference\nor when2meet link")}
                         className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
                       />
                     </div>
@@ -782,7 +790,7 @@ export function ReservationModal({
                         disabled={submitDisabled}
                         className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg transition-all shadow-[0_0_20px_rgba(16,185,129,0.1)] font-mono uppercase tracking-tighter cursor-pointer"
                       >
-                        {submitting ? "COMMITTING..." : isAuthenticated ? "SUBMIT_RSVN" : "LOGIN_TO_ACT"}
+                        {submitting ? tx("提交中...", "COMMITTING...") : isAuthenticated ? tx("送出預約", "SUBMIT_RSVN") : tx("請先登入", "LOGIN_TO_ACT")}
                       </motion.button>
                     </div>
                   </motion.form>
@@ -792,23 +800,23 @@ export function ReservationModal({
 
             <div className="w-full md:w-3/5 p-8 bg-slate-950 flex flex-col min-h-[420px]">
               <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-                <h3 className="text-[10px] font-bold tracking-[0.2em] text-slate-600 uppercase font-mono">Terminal_Availability_Matrix</h3>
+                <h3 className="text-[10px] font-bold tracking-[0.2em] text-slate-600 uppercase font-mono">{tx("時段預約矩陣", "Terminal_Availability_Matrix")}</h3>
                 <div className="flex items-center gap-4 text-[9px] font-mono font-semibold flex-wrap">
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-sm bg-slate-800 border border-slate-700"></div>
-                    <span className="text-slate-600">FREE</span>
+                    <span className="text-slate-600">{tx("空閒", "FREE")}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-sm bg-slate-950 border border-slate-700"></div>
-                    <span className="text-slate-600">OFFLINE</span>
+                    <span className="text-slate-600">{tx("未開放", "OFFLINE")}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/50"></div>
-                    <span className="text-emerald-500">SELECTED</span>
+                    <span className="text-emerald-500">{tx("已選取", "SELECTED")}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-sm bg-rose-500/20 border border-rose-500/50"></div>
-                    <span className="text-rose-500">SATURATED</span>
+                    <span className="text-rose-500">{tx("已額滿", "SATURATED")}</span>
                   </div>
                 </div>
               </div>
@@ -819,7 +827,7 @@ export function ReservationModal({
                     <div className="w-16 shrink-0"></div>
                     {availability?.dates.map((day) => (
                       <div key={day.date} className="w-20 flex flex-col items-center justify-center text-[10px] font-mono font-bold text-slate-500 py-2 border-b border-slate-800">
-                        <span>{day.dayLabel}</span>
+                        <span>{translateDayLabel(day.dayLabel, lang)}</span>
                         <span className="text-[8px] text-slate-700">{day.display}</span>
                       </div>
                     ))}
@@ -859,14 +867,14 @@ export function ReservationModal({
                         const isPast = slotDateTime < new Date();
                         const isClickable = slot.isOpen && slot.remainingCapacity >= selectedPeople && !isPast;
                         const title = !slot.isOpen
-                          ? "Offline"
+                          ? tx("未開放", "Offline")
                           : isPast
-                            ? "Expired"
+                            ? tx("已過期", "Expired")
                             : slot.remainingCapacity < selectedPeople
-                              ? `${slot.time}-${slot.endTime} · Saturation: ${slot.remainingCapacity} left`
+                              ? `${slot.time}-${slot.endTime} · ` + tx(`名額不足: 僅剩 ${slot.remainingCapacity}`, `Saturation: ${slot.remainingCapacity} left`)
                               : slot.hasReservation
-                                ? `${slot.time}-${slot.endTime} · ${String(slot.occupiedCount)} ACTIVE, ${String(slot.remainingCapacity)} FREE`
-                                : `${slot.time}-${slot.endTime} · READY`;
+                                ? `${slot.time}-${slot.endTime} · ` + tx(`${slot.occupiedCount} 人使用中, ${slot.remainingCapacity} 人空閒`, `${slot.occupiedCount} ACTIVE, ${slot.remainingCapacity} FREE`)
+                                : `${slot.time}-${slot.endTime} · ` + tx("可預約", "READY");
                         
                         return (
                           <motion.button
