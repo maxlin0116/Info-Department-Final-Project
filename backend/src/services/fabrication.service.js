@@ -173,6 +173,7 @@ async function assertServiceOpen(serviceType) {
 }
 
 async function createJob(user, serviceType, file, body) {
+  if (user?.isActive === false) throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   if (!file) throw createError(400, "Please upload a file");
   try {
     await assertServiceOpen(serviceType);
@@ -237,6 +238,7 @@ async function getJob(user, jobId) {
 }
 
 async function confirmThreeDpJob(user, jobId, data) {
+  if (user?.isActive === false) throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   const job = await FabricationJob.findById(jobId);
   if (!job || String(job.user) !== user.id) throw createError(404, "Job not found");
   if (job.serviceType !== "3dp" || job.status !== "slice_ready") throw createError(409, "This job is not ready to confirm");
@@ -276,6 +278,7 @@ async function confirmThreeDpJob(user, jobId, data) {
 }
 
 async function retrySlice(user, jobId) {
+  if (user?.isActive === false) throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   const job = await FabricationJob.findById(jobId);
   if (!job || (String(job.user) !== user.id && user.role !== "admin")) throw createError(404, "Job not found");
   if (job.status !== "slice_failed") throw createError(409, "Only failed slices can be retried");
@@ -288,6 +291,7 @@ async function retrySlice(user, jobId) {
 }
 
 async function cancelJob(user, jobId) {
+  if (user?.isActive === false && user.role !== "admin") throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   const job = await FabricationJob.findById(jobId);
   if (!job || (String(job.user) !== user.id && user.role !== "admin")) throw createError(404, "Job not found");
   if (TERMINAL_STATUSES.includes(job.status) || job.status === "running") throw createError(409, "This job can no longer be cancelled");
@@ -347,6 +351,7 @@ async function getQueues() {
 }
 
 async function acknowledgeCollection(actor, jobId) {
+  if (actor?.isActive === false && actor.role !== "admin") throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   const job = await FabricationJob.findById(jobId);
   if (!job) throw createError(404, "Job not found");
   if (actor.role !== "admin" && String(job.user) !== actor.id) throw createError(403, "Access denied");
@@ -362,6 +367,7 @@ async function acknowledgeCollection(actor, jobId) {
 }
 
 async function getFileForDownload(user, fileId) {
+  if (user?.isActive === false && user.role !== "admin") throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
   const file = await UploadedFile.findById(fileId);
   if (!file) throw createError(404, "File not found");
   if (String(file.owner) !== user.id && user.role !== "admin") throw createError(403, "Access denied");

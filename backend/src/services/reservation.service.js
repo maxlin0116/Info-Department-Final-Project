@@ -303,6 +303,9 @@ exports.getUserQuota = async (userId) => {
 };
 
 exports.checkInReservation = async (user, reservationId, currentTime = new Date()) => {
+  if (user?.isActive === false) {
+    throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
+  }
   const reservation = await Reservation.findById(reservationId);
   if (!reservation) throw createError(404, "Reservation not found");
   if (String(reservation.user) !== user.id) throw createError(403, "You can only check in to your own reservation");
@@ -391,6 +394,10 @@ exports.runLifecycleSweep = async (currentTime = new Date()) => {
 };
 
 exports.createReservation = async (user, data) => {
+  if (user?.isActive === false) {
+    throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
+  }
+
   const areaId = data.areaId;
   const startTime = normalizeDate(data.startTime, "startTime");
   const endTime = normalizeDate(data.endTime, "endTime");
@@ -428,6 +435,9 @@ exports.createReservation = async (user, data) => {
 };
 
 exports.updateReservation = async (user, reservationId, updateData) => {
+  if (user?.isActive === false) {
+    throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
+  }
   const reservation = await Reservation.findById(reservationId).populate("area");
   if (!reservation) {
     throw createError(404, "Reservation not found");
@@ -483,6 +493,9 @@ exports.updateReservation = async (user, reservationId, updateData) => {
 };
 
 exports.cancelReservation = async (user, reservationId, currentTime) => {
+  if (user?.isActive === false && user?.role !== "admin") {
+    throw createError(403, "Account has been suspended. Please contact MakerSpace administration.");
+  }
   const reservation = await Reservation.findById(reservationId);
   if (!reservation) {
     throw createError(404, "Reservation not found");

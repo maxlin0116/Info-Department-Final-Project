@@ -14,7 +14,20 @@ export async function readApi<T>(response: Response): Promise<T> {
   }
   if (!response.ok) {
     const error = payload as { error?: unknown } | null;
-    throw new Error(typeof error?.error === "string" ? error.error : `Request failed (${response.status})`);
+    const errorMessage = typeof error?.error === "string" ? error.error : `Request failed (${response.status})`;
+    if (
+      response.status === 401 ||
+      (response.status === 403 && typeof error?.error === "string" && error.error.toLowerCase().includes("suspended"))
+    ) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mks:auth-error", {
+            detail: { status: response.status, message: errorMessage },
+          })
+        );
+      }
+    }
+    throw new Error(errorMessage);
   }
   return payload as T;
 }

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { X, Calendar, Clock, Users as UsersIcon, CheckCircle2, Gauge, LogIn } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useAuth } from "../auth";
-import { useLanguage, translateAreaName, translateDayLabel } from "../i18n";
+import { useLanguage, translateAreaName, translateDayLabel, translateErrorMessage } from "../i18n";
 import { QuotaInfo } from "./QuotaInfo";
 
 interface ReservationModalProps {
@@ -461,7 +461,11 @@ export function ReservationModal({
       }
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
+        const errorMsg = await readErrorMessage(response);
+        if (response.status === 403 && errorMsg.toLowerCase().includes("suspended")) {
+          logout();
+        }
+        throw new Error(errorMsg);
       }
 
       setIsSuccess(true);
@@ -596,7 +600,7 @@ export function ReservationModal({
                         animate={{ height: "auto", opacity: 1 }}
                         className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 font-mono text-xs overflow-hidden"
                       >
-                        ERROR: {error}
+                        ERROR: {translateErrorMessage(error, lang)}
                       </motion.div>
                     )}
 

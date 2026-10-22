@@ -335,6 +335,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    const handleAuthError = () => {
+      logout();
+    };
+
+    window.addEventListener("mks:auth-error", handleAuthError);
+    return () => {
+      window.removeEventListener("mks:auth-error", handleAuthError);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authState.token) {
+      return;
+    }
+
+    let cancelled = false;
+    const checkCurrentSession = async () => {
+      try {
+        const response = await fetch(getEndpoint("/api/auth/me"), {
+          headers: {
+            Authorization: `Bearer ${authState.token}`,
+          },
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          if (!cancelled) {
+            logout();
+          }
+        }
+      } catch {
+        // network or offline, ignore
+      }
+    };
+
+    void checkCurrentSession();
+    window.addEventListener("focus", checkCurrentSession);
+    const interval = window.setInterval(checkCurrentSession, 15000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", checkCurrentSession);
+      window.clearInterval(interval);
+    };
+  }, [authState.token]);
+
+  useEffect(() => {
     if (!authState.token) {
       return;
     }

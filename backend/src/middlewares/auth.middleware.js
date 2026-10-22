@@ -41,6 +41,12 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ error: "Invalid or expired session" });
     }
 
+    if (user.isActive === false) {
+      return res.status(403).json({
+        error: "Account has been suspended. Please contact MakerSpace administration."
+      });
+    }
+
     req.user = user;
     req.authToken = token;
     next();
@@ -58,7 +64,7 @@ async function optionalAuthenticate(req, _res, next) {
 
   try {
     const user = await resolveUserFromToken(token);
-    if (user) {
+    if (user && user.isActive !== false) {
       req.user = user;
       req.authToken = token;
     }

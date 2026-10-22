@@ -2,13 +2,13 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Cpu, ArrowRight } from "lucide-react";
 import { useAuth } from "../auth";
-import { useLanguage } from "../i18n";
+import { translateErrorMessage, useLanguage } from "../i18n";
 import { PasswordInput } from "./PasswordInput";
 
 export function Login() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
-  const { tx } = useLanguage();
+  const { lang, tx } = useLanguage();
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
   const [asAdmin, setAsAdmin] = useState(false);
@@ -117,7 +117,7 @@ export function Login() {
 
             {error ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                {error}
+                {translateErrorMessage(error, lang)}
               </div>
             ) : null}
 

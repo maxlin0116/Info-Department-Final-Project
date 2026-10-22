@@ -42,6 +42,10 @@ exports.getMe = async (req, res, next) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    if (req.user.isActive === false) {
+      return res.status(403).json({ error: "Account has been suspended. Please contact MakerSpace administration." });
+    }
+
     res.status(200).json({ user: req.user });
   } catch (error) {
     next(error);
@@ -52,6 +56,10 @@ exports.changePassword = async (req, res, next) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (req.user.isActive === false) {
+      return res.status(403).json({ error: "Account has been suspended. Please contact MakerSpace administration." });
     }
 
     const currentPassword = req.body.currentPassword ?? req.body.current_password;

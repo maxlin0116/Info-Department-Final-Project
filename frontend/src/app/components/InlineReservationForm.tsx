@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../auth";
-import { translateAreaName, useLanguage } from "../i18n";
+import { translateAreaName, translateErrorMessage, useLanguage } from "../i18n";
 import { QuotaInfo } from "./QuotaInfo";
 
 interface ReservationQuota {
@@ -175,6 +175,18 @@ export function InlineReservationForm({
 
       const result = await response.json();
       if (!response.ok) {
+        if (
+          response.status === 401 ||
+          (response.status === 403 && typeof result?.error === "string" && result.error.toLowerCase().includes("suspended"))
+        ) {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("mks:auth-error", {
+                detail: { status: response.status, message: result.error },
+              })
+            );
+          }
+        }
         throw new Error(result.error || tx("建立預約失敗", "Failed to create reservation"));
       }
 
@@ -274,7 +286,7 @@ export function InlineReservationForm({
               {error && (
                 <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span className="text-[11px] leading-relaxed">{error}</span>
+                  <span className="text-[11px] leading-relaxed">{translateErrorMessage(error, lang)}</span>
                 </div>
               )}
 

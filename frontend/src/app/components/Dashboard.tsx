@@ -19,7 +19,7 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { ReservationModal } from "./ReservationModal";
 import { ReservationHistory } from "./ReservationHistory";
 import { useAuth } from "../auth";
-import { translateAreaDescription, translateAreaName, useLanguage, type Language } from "../i18n";
+import { translateAreaDescription, translateAreaName, translateErrorMessage, useLanguage, type Language } from "../i18n";
 import { QuotaInfo } from "./QuotaInfo";
 import { AreaCardDeck } from "./AreaCardDeck";
 import { ScheduleMatrixView } from "./ScheduleMatrixView";
@@ -135,7 +135,20 @@ async function readApiError(response: Response) {
 
   try {
     const payload = JSON.parse(text) as { error?: unknown };
-    return typeof payload.error === "string" ? payload.error : `Request failed with status ${response.status}`;
+    const errorMessage = typeof payload.error === "string" ? payload.error : `Request failed with status ${response.status}`;
+    if (
+      response.status === 401 ||
+      (response.status === 403 && typeof payload.error === "string" && payload.error.toLowerCase().includes("suspended"))
+    ) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mks:auth-error", {
+            detail: { status: response.status, message: errorMessage },
+          })
+        );
+      }
+    }
+    return errorMessage;
   } catch {
     return text;
   }
@@ -585,7 +598,8 @@ export function Dashboard() {
         });
 
         if (!response.ok) {
-          throw new Error(`My reservations request failed with ${response.status}`);
+          const errorMsg = await readApiError(response);
+          throw new Error(errorMsg);
         }
 
         const payload = (await response.json()) as MyReservationsResponse;
@@ -779,7 +793,7 @@ export function Dashboard() {
           <div className="px-5 py-6 text-sm text-slate-400 font-mono animate-pulse">{tx("正在讀取預約紀錄...", "READING_RESERVATIONS...")}</div>
         ) : reservationsError ? (
           <div className="px-5 py-6 text-sm text-amber-200 bg-amber-500/10 border-t border-amber-500/20 font-mono">
-            {reservationsError}
+            {translateErrorMessage(reservationsError, lang)}
           </div>
         ) : activeReservations.length === 0 ? (
           <div className="px-5 py-10 text-center text-slate-500 font-mono italic">

@@ -180,3 +180,19 @@ export function translateGrade(grade: string | undefined, lang: Language): strin
   return toZh[grade] || grade;
 }
 
+export function translateErrorMessage(message: string | undefined | null, lang: Language): string {
+  if (!message) return "";
+  if (lang === "en") return message;
+  const toZh: Record<string, string> = {
+    "Account has been suspended. Please contact MakerSpace administration.":
+      "您的帳號已被停權，請聯絡 MakerSpace 管理員。",
+    "Authentication required": "需要登入驗證",
+    "Invalid or expired session": "登入階段無效或已過期，請重新登入",
+    "Invalid student ID or password": "學號或密碼錯誤",
+    "Access denied": "存取被拒",
+    "Please upload a file": "請上傳檔案",
+    "Please provide a job name": "請提供任務名稱",
+  };
+  return toZh[message] || message;
+}
+
